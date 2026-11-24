@@ -1,0 +1,7 @@
+/target
+/data
+/data-*
+*.redb
+*.mdbx
+logs/
+/data.noindex

@@ -1,0 +1,53 @@
+[package]
+name = "meta-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Macro benchmark harness of graphlava (tg.md/17-benchmarks.md, ADR 0020)"
+license = "MIT OR Apache-2.0"
+
+# Own workspace: excluded from the root workspace (root Cargo.toml `exclude`),
+# so root CI and the 1.87 MSRV never build the harness or its competitors.
+[workspace]
+
+[[bin]]
+name = "meta-bench"
+path = "src/main.rs"
+
+[features]
+default = ["oxigraph-rocksdb"]
+# Oxigraph on its on-disk RocksDB store (the default Oxigraph backend). Without
+# it, the Oxigraph adapter runs the in-memory store and records that.
+oxigraph-rocksdb = ["oxigraph/rocksdb"]
+# tiramemsu adapter (needs Rust 1.88+, fetched from git; never in the default build).
+tiramemsu = ["dep:tiramemsu"]
+
+[dependencies]
+graphlava = { path = "../crates/graphlava" }
+# 0.40 so libsqlite3-sys (links = "sqlite3") is shared with tiramemsu's host.
+rusqlite = { version = "0.40", features = ["bundled"] }
+# 0.4 line on purpose: oxigraph 0.5 pins spargebra =0.4.8 with feature `sep-0002`, which feature-unifies
+# into graphlava's spargebra and breaks its build (non-exhaustive match on Function::Adjust).
+oxigraph = { version = "0.4", default-features = false }
+tiramemsu = { git = "https://github.com/Volland/tiramemsu", optional = true, default-features = false, features = ["sparql"] }
+
+anyhow = "1"
+base64 = "0.22"
+clap = { version = "4.5", features = ["derive"] }
+hdrhistogram = "7.5"
+libc = "0.2"
+rand = { version = "0.8", features = ["small_rng"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = 1
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
