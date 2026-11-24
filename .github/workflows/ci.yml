@@ -252,6 +252,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # The C programs link the staticlib; build it before the tests run.
+      - run: cargo build -p graphlava-ffi --lib --locked
       - run: cargo test -p graphlava-ffi --locked --test c_program
         env:
           CC: clang

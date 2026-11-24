@@ -33,6 +33,12 @@ fn native_libs() -> &'static [&'static str] {
 /// `cargo test` builds the library only as an rlib, so the staticlib may
 /// not exist yet: build it once with the same profile when it is missing.
 fn staticlib() -> Option<PathBuf> {
+    // Tests run in parallel; build the staticlib at most once.
+    static LIB: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    LIB.get_or_init(find_or_build_staticlib).clone()
+}
+
+fn find_or_build_staticlib() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let deps = exe.parent()?;
     let candidates = [
@@ -48,9 +54,19 @@ fn staticlib() -> Option<PathBuf> {
     if release {
         cmd.arg("--release");
     }
-    let ok = cmd.status().is_ok_and(|s| s.success());
-    if !ok {
-        return None;
+    match cmd.output() {
+        Ok(out) if out.status.success() => {}
+        Ok(out) => {
+            eprintln!(
+                "building libgraphlava_ffi.a failed:\n{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            return None;
+        }
+        Err(e) => {
+            eprintln!("could not run cargo to build libgraphlava_ffi.a: {e}");
+            return None;
+        }
     }
     candidates.into_iter().find(|p| p.exists())
 }
