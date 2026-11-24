@@ -38,7 +38,7 @@ jobs:
           out=meta-core-${{ github.ref_name }}-${{ matrix.target }}
           mkdir "$out"
           cp LICENSE-MIT LICENSE-APACHE README.md "$out"/
-          for f in libmeta_core.a libmeta_core.so libmeta_core.dylib meta_core.dll meta_core.dll.lib meta_core.lib; do
+          for f in libmeta_core_ffi.a libmeta_core_ffi.so libmeta_core_ffi.dylib meta_core_ffi.dll meta_core_ffi.dll.lib meta_core_ffi.lib; do
             [ -f "$dir/$f" ] && cp "$dir/$f" "$out"/ || true
           done
           tar czf "$out.tar.gz" "$out"

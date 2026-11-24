@@ -16,7 +16,7 @@ Status: design. The Rust workspace and CI are set up; no engine implementation e
 | [docs/adr/](docs/adr/) | architecture decision records 0002–0018 |
 | [openspec/changes/v0-core/](openspec/changes/v0-core/) | the v0 change: proposal, capability specs with scenarios, design, tasks |
 | [crates/meta-core/](crates/meta-core/) | the embeddable core crate (placeholder) |
-| [crates/meta-core-ffi/](crates/meta-core-ffi/) | C FFI, built as `libmeta_core` for desktop, iOS and Android |
+| [crates/meta-core-ffi/](crates/meta-core-ffi/) | C FFI, built as `libmeta_core_ffi` for desktop, iOS and Android |
 | [.github/workflows/](.github/workflows/) | CI (Linux, macOS, Windows, iOS, Android, MSRV, cargo-deny, `tg` checks) and tag-driven releases |
 | [CONTEXT.md](CONTEXT.md) | glossary of domain terms |
 | [tg.md/pre-design.md](tg.md/pre-design.md) | the original design handover |
@@ -32,7 +32,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Rust 1.85+ (edition 2024). Pushing a `v*` tag builds `libmeta_core` for every desktop and iOS target and attaches the archives to a GitHub release.
+Rust 1.85+ (edition 2024). Pushing a `v*` tag builds `libmeta_core_ffi` for every desktop and iOS target and attaches the archives to a GitHub release.
 
 ## License
 

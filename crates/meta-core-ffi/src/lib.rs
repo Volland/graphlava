@@ -1,4 +1,4 @@
-//! C FFI for meta-core. Builds as `libmeta_core` (cdylib and staticlib) for
+//! C FFI for meta-core. Builds as `libmeta_core_ffi` (cdylib and staticlib) for
 //! desktop, iOS and Android hosts.
 
 use std::ffi::{CStr, c_char};
