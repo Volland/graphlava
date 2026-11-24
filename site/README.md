@@ -11,6 +11,8 @@ The static website for graphlava: plain HTML and one stylesheet. No build step, 
 | `assets/logo-wordmark.svg` | mark with the word "graphlava" (system font) |
 | `assets/favicon.svg` | simplified mark for 16–32 px |
 | `CNAME` | `graphlava.org`, for GitHub Pages |
+| `impressum.html`, `datenschutz.html`, `agb.html` | German legal pages (Impressum, Datenschutzerklärung, AGB), linked from every footer |
+| `author.html` | mini author page, linked from the nav; links to pavlyshyn.me |
 | `404.html` | not-found page (uses root-relative paths) |
 
 Preview locally: `python3 -m http.server -d site 8000`, then open http://localhost:8000.
