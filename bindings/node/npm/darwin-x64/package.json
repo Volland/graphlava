@@ -1,0 +1,28 @@
+{
+  "name": "@graphlava/node-darwin-x64",
+  "version": "0.0.0",
+  "description": "Prebuilt graphlava Node.js addon for darwin-x64 (x86_64-apple-darwin)",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Volland/graphlava",
+    "directory": "bindings/node"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "graphlava.darwin-x64.node",
+  "files": [
+    "graphlava.darwin-x64.node",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
