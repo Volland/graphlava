@@ -3,7 +3,7 @@ type: Requirement
 openspec: [named-graphs]
 status: draft
 priority: must
-specs: ["adr:0003", "adr:0007", "adr:0008", "adr:0010", "adr:0017"]
+specs: ["adr:0003", "adr:0007", "adr:0008", "adr:0010", "adr:0017", "adr:0024", "adr:0029"]
 ---
 # Named and nested graphs
 
@@ -13,6 +13,8 @@ Graphs as nodes: membership through ID chunks and extra memberships, transitive 
 - follows_from:: [[adr:0007]]
 - follows_from:: [[adr:0008]]
 - follows_from:: [[adr:0017]]
+- follows_from:: [[adr:0024]]
+- follows_from:: [[adr:0029]]
 - depends_on:: [[02-id-encoding#Allocation]] {strength: hard}
 
 ## Purpose
@@ -31,13 +33,13 @@ Every statement and hyperedge has one home graph, fixed by the chunk its ID was 
 
 <rule id="gr-home-graph" strength="must">
 
-The home graph of item X is `gchunk[chunk(X)].graph_id`. It is set at allocation and never changes, even when X is later moved ([[open-questions#Moving an item to another graph]]).
+The home graph of item X is `gchunk[chunk(X)].graph_id`. It is set at allocation and never changes, even when X is later moved: a move is an extra membership plus a `moved` tombstone on the home membership ([[09-graphs#Membership operations]]).
 
 </rule>
 
 <rule id="gr-graph-ranges" strength="must">
 
-The direct items of graph g are the union of ID ranges `[chunk << 20, (chunk + 1) << 20)` over `graph_chunks` prefix `(g)`, plus extra members from `gmem`. This set is computed as a roaring bitmap of ranges.
+The direct items of graph g are the union of ID ranges `[chunk << 20, (chunk + 1) << 20)` over `graph_chunks` prefix `(g)`, plus extra members from `gmem`, minus items with a `moved` tombstone under g. The ranges are kept as a set of chunk numbers, so testing an ID is one lookup of `id >> 20`; extras and tombstones are a small roaring bitmap.
 
 </rule>
 
@@ -53,7 +55,7 @@ An item can belong to graphs other than its home graph. Each extra membership is
 
 | Table | Key | Value |
 | --- | --- | --- |
-| `gmem` | `(g, item)` | promoted statement ID `u64`, or 0 |
+| `gmem` | `(g, item)` | `flags: u8` (bit 0 `home`, bit 1 `moved`), promoted membership statement ID `u64` or 0 |
 | `gmem_rev` | `(item, g)` | none |
 
 <rule id="gr-extra-pair" strength="must">
@@ -64,15 +66,39 @@ An item can belong to graphs other than its home graph. Each extra membership is
 
 <rule id="gr-membership-virtual" strength="must">
 
-`(X, :in, g)` is a virtual triple: true when g is X's home graph or `(g, X)` is in `gmem`. It has no statement ID until annotated ([[adr:0017]]).
+`(X, :in, g)` is a virtual triple: true when g is X's home graph and `gmem(g, X)` is not a `moved` tombstone, or when `gmem(g, X)` is an extra membership. It has no statement ID until annotated ([[adr:0017]]).
 
 </rule>
 
 <rule id="gr-membership-promote" strength="must">
 
-Annotating a membership allocates a statement ID in a statement chunk of X's home graph. For an extra membership the ID is stored as the `gmem` value; for home membership it is stored in `gmem` under `(home, X)` with a home flag in the high bit of the value, so the pointer has one place to live. Deleting the membership deletes the promoted statement and cascades ([[06-transactions-durability#Cascade delete]]).
+Annotating a membership allocates a statement ID in a statement chunk of X's home graph. For an extra membership the ID is stored as the `gmem` value; for home membership it is stored in `gmem` under `(home, X)` with the `home` flag set, so the pointer has one place to live. Deleting the membership deletes the promoted statement and cascades ([[06-transactions-durability#Cascade delete]]).
 
 </rule>
+
+## Membership operations
+
+How inserts, deletes and moves act on an item that can be in several graphs: one statement, many memberships, dataset semantics for every graph clause ([[adr:0024]]).
+
+<rule id="gr-insert-existing" strength="must">
+
+Inserting `(s,p,o)` into graph g when a non-multi statement with that triple already exists in the same store adds a membership of g (an extra membership, or removal of a `moved` tombstone when g is its home) and returns the existing ID. It is a no-op when the statement is already a direct member of g.
+
+</rule>
+
+<rule id="gr-delete-in-graph" strength="must">
+
+Deleting `(s,p,o)` inside a graph clause for g removes only the membership in g. Deleting a statement without a graph clause, or removing its last membership, deletes the statement and cascades ([[06-transactions-durability#Cascade delete]]). Removing a home membership writes a `moved` tombstone.
+
+</rule>
+
+<rule id="gr-move" strength="must">
+
+Moving X from g to h adds a membership of h and removes the membership of g in one transaction. X keeps its ID, its home graph (by chunk) and its annotations.
+
+</rule>
+
+Per-graph provenance (which episode asserted a fact, with what confidence) is written as annotations of the promoted membership `<< X :in g >>`, so one statement can carry different metadata per graph.
 
 ## Scope expansion
 
@@ -111,7 +137,7 @@ For each scoped pattern the planner picks one of three access paths from the sco
 
 <rule id="gr-plan-threshold" strength="should">
 
-The planner chooses range-driven when the estimated S is below the estimated number of pattern matches across the whole database. The crossover constant is to be measured ([[17-benchmarks#Engine bake-off]]).
+The planner chooses range-driven when the estimated S is below the estimated number of pattern matches across the whole database. The crossover constant is to be measured ([[17-benchmarks#Engine bake-off]]). A filter-driven plan tests each statement ID against the chunk set of the scope and then against the extras and tombstones bitmap.
 
 </rule>
 
@@ -123,7 +149,7 @@ Graphs nest through `(child, :in, parent)`. Nesting forms a DAG: several parents
 | --- | --- | --- |
 | `gparent` | `(child, parent)` | none |
 | `gchild` | `(parent, child)` | none |
-| `in_star` | `(descendant, ancestor)` | path count `u32` |
+| `in_star` | `(descendant, ancestor)` | none |
 | `in_star_rev` | `(ancestor, descendant)` | none |
 
 <rule id="gr-dag-cycle" strength="must">
@@ -138,21 +164,29 @@ Adding `(a, :in, b)` fails with `GraphDepthExceeded` when the resulting longest 
 
 </rule>
 
-<rule id="gr-in-star-counting" strength="must">
+<rule id="gr-in-star-closure" strength="must">
 
-`in_star` holds the transitive closure with a path count per pair. Adding an edge `(a, b)` adds, for every descendant d of a (including a) and every ancestor u of b (including b), the product of path counts to `(d, u)`. Removing an edge subtracts the same and deletes pairs that reach 0. Cost: O(|desc(a)| · |anc(b)|) per edge change.
+`in_star` holds the transitive closure as a set of pairs, with no path counts ([[adr:0029]]). Adding an edge `(a, b)` inserts `(d, u)` for every d in `desc(a) ∪ {a}` and every u in `anc(b) ∪ {b}`. Removing an edge recomputes, in topological order, `anc(d)` as the union of `anc(p) ∪ {p}` over the remaining parents p of every d in `desc(a) ∪ {a}`, and writes the difference. Cost: O(|desc(a)| · |anc(b)|) to add, O(|desc(a)| · depth) reads to remove.
 
 </rule>
 
-`in_star` is a built-in materialized rule, maintained by counting inside the writer transaction. In v0 user rules are on demand only ([[adr:0013]]); whether built-in rules are exempt is [[open-questions#Built-in materialized rules in v0]].
+Path counts are avoided because they grow exponentially in a DAG: about 32 stacked diamonds overflow a `u32`, well within the depth limit.
+
+`in_star` is a built-in materialized rule, maintained inside the writer transaction. In v0 user rules are on demand only ([[adr:0013]]); whether built-in rules are exempt is [[open-questions#Built-in materialized rules in v0]].
 
 ## Partitioned graphs
 
-A partitioned graph has its own set of tables in the same file: orderings, `stmt`, `props`, `hedge`, `incidence`. It gives isolation and fast drop for large graphs ([[adr:0003]]).
+A partitioned graph has its own set of tables in the same file: orderings, `stmt`, `props`, `plist`, `hedge`, `incidence`. It gives isolation and fast drop for large graphs ([[adr:0003]]).
 
 <rule id="gr-partition-tables" strength="must">
 
 The tables of a partitioned graph g are named with g's ID as a suffix. Statements whose home graph is g live only there. Global orderings hold no entries for them.
+
+</rule>
+
+<rule id="gr-partition-unique" strength="must">
+
+Uniqueness of `(s,p,o)` holds per store: the global tables, or the tables of one partitioned graph ([[adr:0024]]). An insert probes only the store it writes to, so the same triple may exist once in the global store and once in each partition, with different IDs.
 
 </rule>
 
@@ -164,7 +198,7 @@ In v0 and v1 a graph is partitioned only by an explicit declaration at creation.
 
 <rule id="gr-partition-cross" strength="must">
 
-A query whose scope covers a partitioned graph and other graphs unions the partitioned tables with the global tables. A nested child of a partitioned graph is not partitioned unless it is declared so itself.
+A query whose scope covers a partitioned graph and other graphs unions the partitioned tables with the global tables, deduplicating non-multi statements by `(s,p,o)` with a merge on the shared ordering; a pattern that binds the statement ID yields one row per store. A nested child of a partitioned graph is not partitioned unless it is declared so itself.
 
 </rule>
 
@@ -174,7 +208,7 @@ A query whose scope covers a partitioned graph and other graphs unions the parti
 
 <rule id="gr-drop-plain" strength="must">
 
-A plain drop deletes every item whose home graph is g, removes all `gmem` entries with graph g, and deletes g's `gparent` and `gchild` edges with `in_star` maintenance. Children that lose their last parent become roots and keep their items.
+A plain drop removes every membership in g: all `gmem` entries with graph g, and the home membership of every item whose home graph is g. An item that is still a member of another graph survives, with a `moved` tombstone under g; every other item of g is deleted. g's `gparent` and `gchild` edges are deleted with `in_star` maintenance. Children that lose their last parent become roots and keep their items.
 
 </rule>
 
@@ -190,7 +224,7 @@ Deleting g's items cascades to their annotations, also in other graphs, and resp
 
 </rule>
 
-Range deletion over g's chunks is O(items in g) tree deletes in the global tables; for a partitioned graph it is dropping its tables, O(1) in table count plus redb's page freeing (to be measured).
+Dropping g costs O(items in g) tree deletes in the global tables plus one `gmem_rev` probe per item to find survivors; for a partitioned graph with no shared items it is dropping its tables, O(1) in table count plus redb's page freeing (to be measured).
 
 ## Statistics
 
@@ -209,7 +243,9 @@ No platform-specific behaviour. Large drops run in one write transaction, which 
 Property and conformance tests for membership and scope.
 
 - Scope equivalence: for random DAGs up to depth 10, `GRAPH :g` results equal a naive closure computation.
-- `in_star` counting: random edge insert and delete sequences keep it equal to a recomputed closure.
+- `in_star` closure: random edge insert and delete sequences keep it equal to a recomputed closure, including a lattice of 40 stacked diamonds.
+- Membership operations: inserting an existing triple into a second graph, deleting it in one graph, moving it, and dropping either graph; the statement survives exactly while it has a membership.
+- Partitions: the same triple in the global store and in a partition is returned once by an unscoped `SELECT` and with two IDs by a reifier pattern.
 - Cycle and depth rejection cases.
 - Drop: plain, recursive, shared children, annotations in other graphs, hyperedge block.
 - Plan choice: the same query over a 100-statement graph and a 10M-statement graph picks range-driven and filter-driven respectively.
@@ -219,6 +255,6 @@ Property and conformance tests for membership and scope.
 
 Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
 
-- [[open-questions#Moving an item to another graph]]
 - [[open-questions#Built-in materialized rules in v0]]
+- [[open-questions#Partitioned graph per file]]
 - [[open-questions#Large drops on mobile]]

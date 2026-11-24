@@ -1,0 +1,15 @@
+name = "metacore-formal"
+version = "0.1.0"
+defaultTargets = ["MetaCore", "oracle"]
+
+[leanOptions]
+autoImplicit = false
+
+[[lean_lib]]
+name = "MetaCore"
+
+# Executable reference model: emits JSON-lines traces that the Rust
+# model-based tests replay (see tg.md/19-verification.md#Refinement bridge).
+[[lean_exe]]
+name = "oracle"
+root = "Main"

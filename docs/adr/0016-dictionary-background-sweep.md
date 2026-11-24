@@ -44,3 +44,5 @@ File size is not minimal between sweeps. A sweep costs O(dictionary size) point 
 ## More Information
 
 Resolves handover open question 9. Related: [ADR-0011](0011-id-layout.md) for inline literals.
+
+Amended by [ADR-0023](0023-dictionary-mark-sweep-owned-literals.md) (2026-11-24): liveness is decided by a mark pass over a read snapshot instead of per-term probes, and large literals are owned and deleted synchronously.

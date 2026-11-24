@@ -3,7 +3,7 @@ type: Requirement
 openspec: [datalog-query]
 status: draft
 priority: must
-specs: ["adr:0009", "adr:0013", "adr:0014", "adr:0008", "adr:0005"]
+specs: ["adr:0009", "adr:0013", "adr:0014", "adr:0008", "adr:0005", "adr:0029"]
 ---
 # Datalog
 
@@ -195,9 +195,10 @@ Complexity: semi-naive evaluation does O(total derivations) work per stratum; ma
 
 ## Materialized maintenance
 
-How `@materialized` predicates are kept current inside the writer transaction: which predicates qualify, counting for non-recursive rules, DRed with a budget for recursive ones, and the stale fallback.
+How `@materialized` predicates are kept current inside the writer transaction: which predicates qualify, counting for non-recursive rules, Backward/Forward with a budget for recursive ones, and the stale fallback.
 
 - follows_from:: [[adr:0009]]
+- follows_from:: [[adr:0029]]
 - depends_on:: [[06-transactions-durability#Group commit]] {strength: soft}
 
 <rule id="dl-mat-stable-only" strength="must">
@@ -212,9 +213,9 @@ Non-recursive materialised rules are maintained by counting (Gupta, Mumick, Subr
 
 </rule>
 
-<rule id="dl-mat-dred" strength="must">
+<rule id="dl-mat-bf" strength="must">
 
-Recursive materialised rules are maintained by DRed (delete and re-derive, same paper): over-delete everything derivable from deleted facts, re-derive what still has another derivation, then insert new derivations semi-naively.
+Recursive materialised rules are maintained by the Backward/Forward algorithm (Motik, Nenov, Piro, Horrocks, "Incremental update of Datalog materialisation: the Backward/Forward algorithm", AAAI 2015). For each derived fact that a deletion may invalidate, a backward search over the remaining facts looks for another derivation before the fact is deleted; only facts without one are deleted and propagated forward. New derivations are inserted semi-naively. Unlike DRed (delete and re-derive), it does not over-delete, which keeps maintenance within the budget of `dl-mat-budget` far more often ([[adr:0029]]).
 
 </rule>
 
@@ -232,7 +233,7 @@ Derived facts live in a separate derived table, never in the base orderings. The
 
 <rule id="dl-mat-in-star" strength="must">
 
-The graph closure `in_star` is a built-in `@materialized` rule over `:in` between graphs. Its DAG shape ([[09-graphs#Nesting DAG]]) means deletions use counting on path counts rather than DRed, so dropping one of two parent links never removes a still-reachable ancestor.
+The graph closure `in_star` is a built-in `@materialized` rule over `:in` between graphs. Its DAG shape and depth limit ([[09-graphs#Nesting DAG]]) allow a specialised maintenance: inserts add the product of descendants and ancestors, and deletes recompute ancestor sets of the affected descendants in topological order, so dropping one of two parent links never removes a still-reachable ancestor and no path count can overflow.
 
 </rule>
 
@@ -246,7 +247,7 @@ The graph closure `in_star` is a built-in `@materialized` rule over `:in` betwee
 
 <output>
 
-DRed over-deletes `ancestor(x, carol)` and everything above that went through `bob`, re-derives facts with another path, and commits. If more than the budget of facts is touched, `ancestor` becomes stale and queries use on-demand evaluation until the rebuild ends.
+Backward/Forward checks each `ancestor(x, carol)` reached through `bob` for another derivation, deletes only the facts that have none, and commits. If more than the budget of facts is touched, `ancestor` becomes stale and queries use on-demand evaluation until the rebuild ends.
 
 </output>
 

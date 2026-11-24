@@ -53,3 +53,5 @@ SPARQL 1.2 is still evolving and needs a tracked target version. Cypher-driven I
 ## More Information
 
 Refines handover D1 and section 12 deliverable `18-roadmap.md`.
+
+Amended by [ADR-0029](0029-incremental-maintenance-algorithms.md) and [ADR-0030](0030-vector-index-scoped-rabitq.md) (2026-11-24): v1 maintenance uses Backward/Forward instead of DRed; the v1 vector index is IVF with RaBitQ codes and scope-aware exact search instead of IVF-PQ.

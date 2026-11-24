@@ -2,7 +2,7 @@
 type: Requirement
 status: draft
 priority: must
-specs: ["adr:0002", "adr:0012", "adr:0013", "adr:0014", "adr:0018"]
+specs: ["adr:0002", "adr:0012", "adr:0013", "adr:0014", "adr:0018", "adr:0025", "adr:0026"]
 ---
 # API
 
@@ -10,6 +10,7 @@ The ways applications reach meta-core: the Rust embedding API (v0), a C FFI (v0)
 
 - follows_from:: [[adr:0002]]
 - follows_from:: [[adr:0014]]
+- follows_from:: [[adr:0026]]
 - depends_on:: [[06-transactions-durability#Durability levels]] {strength: hard}
 - depends_on:: [[11-sparql#Scope]] {strength: hard}
 - depends_on:: [[13-datalog#Surface syntax]] {strength: hard}
@@ -41,7 +42,8 @@ pub enum Durability { Sync, Ordered, Relaxed }
 impl Database {
     pub fn open(path: &Path, opts: OpenOptions) -> Result<Database>;
     pub fn read(&self) -> Result<ReadTxn<'_>>;
-    pub fn write(&self, durability: Durability) -> Result<WriteTxn<'_>>;
+    pub fn write(&self, durability: Durability) -> Result<WriteTxn<'_>>;   // in-process only, time-limited
+    pub fn submit(&self, req: WriteRequest, durability: Durability) -> Result<CommitTicket>; // one-shot
     pub fn prepare(&self, lang: Lang, text: &str) -> Result<Prepared>;
     pub fn sparql(&self, text: &str) -> Result<Prepared>;    // = prepare(Lang::Sparql, ..)
     pub fn datalog(&self, program: &str) -> Result<Prepared>; // = prepare(Lang::Datalog, ..)
@@ -61,6 +63,12 @@ impl WriteTxn<'_> {
 
 pub enum Lang { Sparql, Datalog, Cypher /* v1 */ }
 ```
+
+<rule id="api-write-in-process" strength="must">
+
+An interactive `WriteTxn` exists only inside the owner process and holds the writer for at most a configured time (default 100 ms, measured from `write()`); past it, further calls fail with `WriteTimeout` and the transaction aborts. Other processes never hold the writer ([[adr:0026]]).
+
+</rule>
 
 <rule id="api-durability-per-txn" strength="must">
 
@@ -92,6 +100,59 @@ The core API is synchronous. An `async` facade (for the server crate) wraps it b
 
 </rule>
 
+## Core API
+
+Typed operations on the data model that bypass the parser, planner and plan cache. They serve the point lookups and small writes that dominate agent memory at storage speed, and every query surface lowers to the same operations ([[adr:0026]]).
+
+- depends_on:: [[01-data-model#Statements#Operations]] {strength: hard}
+
+```rust
+impl ReadTxn<'_> {   // also on WriteTxn
+    pub fn props(&self, node: Id) -> Result<Props>;                         // one record read
+    pub fn out(&self, s: Id, p: Option<Id>) -> Result<Edges>;               // SPO prefix
+    pub fn inc(&self, o: Id, p: Option<Id>) -> Result<Edges>;               // POS or OSP prefix
+    pub fn stmt(&self, id: Id) -> Result<Option<Triple>>;                   // one `stmt` read
+    pub fn hedge(&self, e: Id) -> Result<Option<Hyperedge>>;
+    pub fn lookup(&self, term: &Term) -> Result<Option<Id>>;                // no interning
+}
+
+pub enum CoreOp {
+    Insert { s: TermRef, p: TermRef, o: TermRef, graph: Option<Id> },
+    Set { s: TermRef, p: TermRef, o: TermRef },
+    Update { id: Id, o: TermRef, expected: Option<TermRef> },               // compare-and-set
+    Annotate { id: Id, p: TermRef, o: TermRef },
+    Delete { id: Id, mode: DeleteMode },                                    // cascade, KEEP, DETACH
+    CreateHedge { ty: Id, roles: Vec<(Id, TermRef)>, attrs: Vec<(Id, TermRef)> },
+    AddMember { item: Id, graph: Id },
+    RemoveMember { item: Id, graph: Id },
+}
+```
+
+<rule id="api-core-equivalence" strength="must">
+
+A core operation has exactly the effect of the IR `Write` operation it names ([[10-ir#Operators#Write operators]]), and a core read returns the same rows as the corresponding SPARQL pattern. The property test of [[01-data-model#Test plan]] runs through this API.
+
+</rule>
+
+## Write requests
+
+How writes reach the single writer from outside the owner process: as one-shot requests that run to completion inside one batch ([[06-transactions-durability#Group commit]]).
+
+- follows_from:: [[adr:0026]]
+- follows_from:: [[adr:0025]]
+
+| Request | Content |
+| --- | --- |
+| `Update` | SPARQL Update text and parameters |
+| `Program` | a Datalog program that writes |
+| `Ops` | a list of core operations, applied in order, all or nothing |
+
+<rule id="api-one-shot" strength="must">
+
+A write request carries everything it needs; it runs in the writer without waiting for its client, and its result returns with the commit acknowledgment. Read-modify-write across round trips uses `Update { expected }` (compare-and-set) and retries on `Conflict`.
+
+</rule>
+
 ## C FFI
 
 A stable C ABI over the Rust API, used by Swift, Kotlin and other languages. Handles are opaque pointers; errors are codes plus a message.
@@ -113,7 +174,8 @@ Results cross the FFI as column batches of `u64` IDs plus an on-demand term deco
 | Function group | Examples |
 | --- | --- |
 | lifecycle | `mc_open`, `mc_close`, `mc_suspend`, `mc_resume` |
-| transactions | `mc_read_begin`, `mc_write_begin(durability)`, `mc_commit`, `mc_abort` |
+| transactions | `mc_read_begin`, `mc_write_begin(durability)` (in-process only), `mc_submit(request, durability)`, `mc_commit`, `mc_abort` |
+| core | `mc_props`, `mc_out`, `mc_in`, `mc_stmt`, `mc_lookup` |
 | queries | `mc_prepare(lang, text)` with `lang` = `MC_LANG_SPARQL` or `MC_LANG_DATALOG`, `mc_query(txn, prepared, params)`, `mc_rows_next_batch`, `mc_term_decode` |
 | admin | `mc_sweep`, `mc_export_snapshot` |
 
@@ -160,7 +222,7 @@ The Kotlin binding runs every database call on a dedicated executor, never on th
 | `/sparql` | GET, POST | SPARQL 1.2 query (SPARQL 1.1 Protocol), results as SPARQL JSON, XML, CSV/TSV or N-Triples/Turtle for `CONSTRUCT` |
 | `/update` | POST | SPARQL 1.2 Update, with header `Meta-Durability: sync`, `ordered` or `relaxed` |
 | `/datalog` | POST | a Datalog program with goals, in the syntax of [[13-datalog#Surface syntax]]; results as SPARQL JSON; same durability header for programs that write |
-| local socket | framed binary | the C FFI operations over IPC, for other processes on the same machine |
+| local socket | framed binary | the C FFI read and core operations and `mc_submit` over IPC, for other processes on the same machine; no interactive write transaction |
 
 <rule id="api-server-protocol" strength="must">
 
@@ -199,6 +261,8 @@ The Rust and C APIs build for all five platforms. Swift bindings ship as an XCFr
 API tests across bindings.
 
 - Lock test: two `open` calls on one file from two processes; the second gets `Locked`.
+- Writer hold: an in-process `WriteTxn` that exceeds its time limit fails with `WriteTimeout`, and other writers proceed.
+- Core API: random core operations and the equivalent SPARQL updates produce identical stores; compare-and-set retries converge under 16 concurrent clients.
 - Suspend test (iOS simulator and device): background the app during a write and a group commit; no `0xdead10cc` and no lost acknowledged commit.
 - FFI fuzz: random call sequences over the C API, no crash and no leak under sanitizers.
 - Server: W3C SPARQL 1.1 Protocol tests.

@@ -11,9 +11,12 @@ Status: design. The Rust workspace and CI are set up; no engine implementation e
 | Path | Content |
 | --- | --- |
 | [tg.md/00-overview.md](tg.md/00-overview.md) | start here: goals, architecture, spec map |
-| [tg.md/](tg.md/) | the specifications `00`–`18` as a typed graph (Requirement, Constraint, Benchmark, Change sections) |
+| [tg.md/](tg.md/) | the specifications `00`–`21` as a typed graph (Requirement, Constraint, Benchmark, Proof, Scenario, Change sections) |
+| [tg.md/19-verification.md](tg.md/19-verification.md) | assurance strategy: Lean proofs, refinement replay, E2E, crash tests, benchmark gates |
+| [formal/](formal/) | Lean 4 model of the store with machine-checked invariants and the trace oracle |
 | [tg.md/open-questions.md](tg.md/open-questions.md) | design questions still open, with options and recommendations |
-| [docs/adr/](docs/adr/) | architecture decision records 0002–0018 |
+| [docs/adr/](docs/adr/) | architecture decision records 0002–0020 |
+| [openspec/config.yaml](openspec/config.yaml) | project context and per-artifact rules every OpenSpec proposal, spec, design and task list must follow |
 | [openspec/changes/v0-core/](openspec/changes/v0-core/) | the v0 change: proposal, capability specs with scenarios, design, tasks |
 | [crates/meta-core/](crates/meta-core/) | the embeddable core crate (placeholder) |
 | [crates/meta-core-ffi/](crates/meta-core-ffi/) | C FFI, built as `libmeta_core_ffi` for desktop, iOS and Android |
@@ -23,13 +26,14 @@ Status: design. The Rust workspace and CI are set up; no engine implementation e
 
 ## Working with the docs
 
-The specs are checked with the `tg` CLI: `tg check`, `tg ontology check`, `tg trace`. The project's own ontology types (`OpenQuestion`, `Benchmark`) and edges (`follows_from`, `resolved_by`, `blocks`, `measured_by`) are declared in [Types/meta-core-types.md](Types/meta-core-types.md).
+The specs are checked with the `tg` CLI: `tg check`, `tg ontology check`, `tg trace`. The project's own ontology types (`OpenQuestion`, `Benchmark`, `Proof`) and edges (`follows_from`, `resolved_by`, `blocks`, `measured_by`, `proves`) are declared in [Types/meta-core-types.md](Types/meta-core-types.md).
 
 ## Building
 
 ```sh
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
+(cd formal && lake build && ./scripts/lean-audit.sh)   # Lean 4 proofs
 ```
 
 Rust 1.85+ (edition 2024). Pushing a `v*` tag builds `libmeta_core_ffi` for every desktop and iOS target and attaches the archives to a GitHub release.

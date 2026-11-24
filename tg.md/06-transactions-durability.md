@@ -3,7 +3,7 @@ type: Requirement
 openspec: [transactions]
 status: draft
 priority: must
-specs: ["adr:0002", "adr:0006", "adr:0012", "adr:0018"]
+specs: ["adr:0002", "adr:0006", "adr:0012", "adr:0018", "adr:0025", "adr:0026"]
 ---
 # Transactions and durability
 
@@ -11,6 +11,7 @@ How meta-core runs transactions on redb: one writer and many snapshot readers in
 
 - follows_from:: [[adr:0002]]
 - follows_from:: [[adr:0012]]
+- follows_from:: [[adr:0025]]
 - follows_from:: [[adr:0006]]
 - depends_on:: [[05-storage-trait#Trait API]] {strength: hard}
 - depends_on:: [[02-id-encoding#Allocation]] {strength: hard}
@@ -25,7 +26,7 @@ One owner process holds the file ([[adr:0002]]). Inside it, one write transactio
 
 <rule id="tx-single-writer" strength="must">
 
-At most one write transaction is open per database file. Write requests from all clients queue in the owner process and run in arrival order. A write transaction sees its own uncommitted writes.
+At most one write transaction is open per database file. Write requests from all clients queue in the owner process and run in arrival order. A write transaction sees its own uncommitted writes. Only code running in the owner process holds a write transaction; IPC and server clients submit one-shot write requests ([[16-api#Write requests]], [[adr:0026]]).
 
 </rule>
 
@@ -70,9 +71,9 @@ The default durability level is `ordered`. A caller may choose `sync` or `relaxe
 
 | Level | Guarantee when the commit call returns | redb mapping | Typical use |
 | --- | --- | --- | --- |
-| `sync` | the transaction survives any crash or power loss | commit with `Durability::Immediate` | user-visible saves, checkpoints |
-| `ordered` | the transaction survives any crash; the call returns only after its batch is flushed | each transaction commits with `Durability::None`; the batch ends with one `Durability::Immediate` commit | default for agent memory writes |
-| `relaxed` | the transaction is atomic and crash-consistent but may be lost; a later `sync` or flushed `ordered` commit makes it durable | commit with `Durability::None` | scratch state, caches, bulk load |
+| `sync` | the transaction survives any crash or power loss | runs in the open batch and closes it at once with `Durability::Immediate` | user-visible saves, checkpoints |
+| `ordered` | the transaction survives any crash; the call returns only after its batch is flushed | runs in the open batch; the batch commits once with `Durability::Immediate` | default for agent memory writes |
+| `relaxed` | the transaction is atomic and crash-consistent but may be lost; a later `sync` or `ordered` batch makes it durable | runs in the open batch; a batch of only `relaxed` requests commits with `Durability::None` | scratch state, caches, bulk load |
 
 <rule id="tx-durability-prefix" strength="must">
 
@@ -82,7 +83,7 @@ Durability is prefix-ordered: if a crash keeps transaction T, it keeps every tra
 
 <rule id="tx-durability-verify" strength="must">
 
-The mapping above relies on redb guaranteeing that a `Durability::Immediate` commit makes every earlier `Durability::None` commit durable, and that a crash after a `None` commit recovers to a consistent earlier state. Both properties are verified by the engine spike before v0 ([[17-benchmarks#Engine bake-off]]).
+The mapping above relies on redb guaranteeing that a `Durability::Immediate` commit is durable when it returns and makes every earlier `Durability::None` commit durable, and that a crash after a `None` commit recovers to a consistent earlier state. `None` is used only for batches of `relaxed` requests. These properties are verified by the engine spike before v0 ([[17-benchmarks#Engine bake-off]]).
 
 </rule>
 
@@ -94,36 +95,47 @@ Mapping levels to specific OS primitives (`F_FULLFSYNC`, `F_BARRIERFSYNC`, `Flus
 
 ## Group commit
 
-`ordered` transactions are batched: each commits on its own, and one flush makes the whole batch durable before any caller in it is acknowledged.
+Write requests are batched into one engine write transaction, which commits once, so pages shared by the batch are copied once and a batch becomes visible exactly when it is durable ([[adr:0025]]).
+
+<rule id="tx-group-one-txn" strength="must">
+
+A batch is one engine write transaction. The writer opens it for the first request it dequeues and runs every following request of the batch inside it, in arrival order. The engine commits once per batch.
+
+</rule>
 
 <rule id="tx-group-window" strength="must">
 
-The writer opens a batch at the first `ordered` commit and closes it when the batch is N ms old or holds M bytes of changes, whichever comes first. N and M are configurable; defaults are to be measured (starting points 2 ms and 4 MiB).
+A batch that holds an `ordered` request closes when it is N ms old or holds M bytes of changes, whichever comes first. A batch of only `relaxed` requests closes as soon as the request queue is empty. N and M are configurable; defaults are to be measured (starting points 2 ms and 4 MiB).
 
 </rule>
 
 <rule id="tx-group-close" strength="must">
 
-A batch closes early when a `sync` transaction commits, when the owner process is asked to go to the background ([[07-platforms#iOS]]), or when the database is closed.
+A batch closes early when a `sync` request has run in it, when the owner process is asked to go to the background ([[07-platforms#iOS]]), or when the database is closed.
+
+</rule>
+
+<rule id="tx-group-request-isolation" strength="must">
+
+A request in a batch first checks everything that can fail by reading (update conflicts, compare-and-set mismatches, hyperedge shapes, the cascade limit, meta-model validation) and then applies its writes through a per-request overlay that is merged into the batch transaction only when the request succeeds. A request that fails is reported to its caller and leaves the batch unchanged. Later requests of the batch see the writes of earlier successful ones.
 
 </rule>
 
 <rule id="tx-group-ack" strength="must">
 
-Every caller in a batch is acknowledged after the closing `Immediate` commit returns. If the flush fails, every transaction in the batch is reported as failed with an I/O error, the database is marked read-only, and the owner process must reopen it.
+Every caller in a batch is acknowledged after the batch commit returns. If the commit fails, every request in the batch is reported as failed with an I/O error, the database is marked read-only, and the owner process must reopen it.
 
 </rule>
 
 ### Algorithm
 
-The writer loop runs transactions in order and decides per commit whether to flush. Cost: one flush per batch instead of one per transaction.
+The writer loop runs requests in order inside the open batch and commits once per batch. Cost: one engine commit and one flush per batch instead of one commit per request.
 
-1. Take the next request from the queue and run it in a redb write transaction.
-2. `relaxed`: commit with `None`, acknowledge.
-3. `ordered`: commit with `None`, append the caller to the open batch; if the window rule fires, close the batch.
-4. `sync`: commit with `Immediate`; this also closes the open batch, so acknowledge the batch callers and then this caller.
-5. Closing a batch with no `sync` commit: run an empty write transaction and commit it with `Immediate`, then acknowledge.
-6. A timer closes an open batch that has had no further commits within N ms.
+1. Take the next request from the queue. If no batch is open, begin a redb write transaction for a new batch.
+2. Run the request under `tx-group-request-isolation`; on failure, report it and continue with the next request.
+3. Append the caller to the batch with its durability level.
+4. If the request was `sync`, or a window or close rule fires, close the batch: commit with `Immediate` if the batch holds any `sync` or `ordered` request, else with `None`; then acknowledge every caller of the batch in arrival order.
+5. A timer closes an open batch when its window expires with no further requests.
 
 <example>
 
@@ -135,7 +147,7 @@ Three agents each write one `ordered` statement 0.3 ms apart; N = 2 ms.
 
 <output>
 
-Three `None` commits and one `Immediate` commit about 2 ms after the first. All three callers return after that flush. Latency per caller is up to N plus one flush; flushes per second drop by the batch size.
+One engine transaction holds all three requests and commits once with `Immediate` about 2 ms after the first. All three callers return after that flush. Latency per caller is up to N plus one flush; commits and flushes per second drop by the batch size, and B-tree pages touched by more than one request are copied once.
 
 </output>
 
@@ -143,7 +155,15 @@ Three `None` commits and one `Immediate` commit about 2 ms after the first. All 
 
 ### Visibility before durability
 
-A `relaxed` or `ordered` commit is visible to new read transactions as soon as its `None` commit returns, before it is durable. A reader can therefore observe data that a crash then loses. This is listed as [[open-questions#Visibility before durability]].
+A batch becomes visible to new readers when its engine commit returns, which for a batch with any `sync` or `ordered` request is also when it is durable ([[adr:0025]]).
+
+Readers therefore never observe `sync` or `ordered` data that a crash can lose. Only a batch of `relaxed` requests is visible before it is durable.
+
+<rule id="tx-visible-durable" strength="must">
+
+A read transaction never sees a `sync` or `ordered` request before that request is durable.
+
+</rule>
 
 ## Crash recovery
 
@@ -230,7 +250,9 @@ Tests are written against the rules above; crash tests run on all five platforms
 
 - Crash injection: kill the owner process at random points of the writer loop; check `tx-recovery-state` and `tx-durability-prefix` over 10^4 runs per level.
 - Power-loss simulation on Linux with a fault-injecting block device (dm-flakey or similar) for `sync` and `ordered`.
-- Group commit: acknowledged `ordered` transactions are present after a crash that happens right after acknowledgement.
+- Group commit: acknowledged `ordered` transactions are present after a crash that happens right after acknowledgement; a reader started during an open batch does not see its requests (`tx-visible-durable`).
+- Request isolation: a batch where every third request fails a compare-and-set or the cascade limit commits exactly the other requests, and later requests see earlier successful ones.
+- Write amplification: bytes written per request at batch sizes 1, 8 and 64 ([[17-benchmarks#Durability commit latency]]).
 - Cascade: chains of annotations of depth 1..10, hyperedge block and `DETACH`, `KEEP ANNOTATIONS`, limit rollback.
 - Reader isolation: long reader sees a stable snapshot while 10^5 commits run.
 - Benchmark: commit latency and flushes per second per level in [[17-benchmarks#Engine bake-off]].
@@ -239,6 +261,5 @@ Tests are written against the rules above; crash tests run on all five platforms
 
 Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
 
-- [[open-questions#Visibility before durability]]
 - [[open-questions#Crash repair time on large files]]
 - [[open-questions#Delete with object-position references]]

@@ -3,7 +3,7 @@ type: Requirement
 openspec: [statement-store]
 status: draft
 priority: must
-specs: ["adr:0002", "adr:0004", "adr:0005", "adr:0009", "adr:0010", "adr:0015", "adr:0017", "adr:0018"]
+specs: ["adr:0002", "adr:0004", "adr:0005", "adr:0009", "adr:0010", "adr:0015", "adr:0017", "adr:0018", "adr:0022", "adr:0024", "adr:0029"]
 ---
 # Physical layout
 
@@ -12,6 +12,7 @@ Every table in the database file, its key and value bytes, the key byte order, t
 - follows_from:: [[adr:0015]]
 - follows_from:: [[adr:0004]]
 - follows_from:: [[adr:0005]]
+- follows_from:: [[adr:0022]]
 - follows_from:: [[adr:0018]]
 - depends_on:: [[02-id-encoding#Bit layout]] {strength: hard}
 - depends_on:: [[05-storage-trait#Trait API]] {strength: hard}
@@ -35,6 +36,7 @@ These tables exist in every database and are written by ordinary statement write
 | `osp` | `(o, s, p)` 24 B | `id: u64` | same |
 | `stmt` | `id` 8 B | `(s, p, o)` 24 B + `flags: u16` | every statement with an ID |
 | `props` | `node_id` 8 B | property record, variable | literal-valued statement |
+| `plist` | `(pred, node)` 16 B | — | first value of a literal predicate on a node; removed with its last value |
 | `meta` | key string | value bytes | format version, flags, counters, cursors, statistics |
 
 <rule id="pl-base-orderings" strength="must">
@@ -69,6 +71,12 @@ Statements on a **Multi predicate** go to separate tables whose key includes the
 | `pos_m` | `(p, o, s, id)` 32 B | — |
 | `osp_m` | `(o, s, p, id)` 32 B | — |
 
+<rule id="pl-plist" strength="must">
+
+`plist` holds `(p, n)` exactly when node n has at least one unpromoted inline property with predicate p. Overwriting a value does not touch it; it changes only when a predicate appears on or disappears from a node ([[adr:0022]]).
+
+</rule>
+
 <rule id="pl-multi-separate" strength="must">
 
 A statement is in the base orderings or in the multi tables, never both, decided by its predicate's `multi` flag. A scan whose predicate is unbound reads both and merges by key prefix ([[adr:0004]]).
@@ -83,7 +91,7 @@ These tables exist only after the planner or the meta-model creates them. Their 
 | --- | --- | --- | --- |
 | `pso`, `sop`, `ops` | permutation 24 B | `id: u64` | [[14-planner-execution#On-demand orderings]] |
 | `pso_m`, `sop_m`, `ops_m` | permutation + `id` 32 B | — | same, for multi predicates |
-| `propidx` | `(pred, value, node)` 24 B | — | value index, [[adr:0005]] |
+| `propidx` | `(pred, sort_key, node, value_id)` 32 B | — | value index, [[adr:0005]], [[adr:0022]] |
 
 <rule id="pl-ondemand-online" strength="must">
 
@@ -97,9 +105,15 @@ All value indexes share one `propidx` table keyed by predicate first, instead of
 
 </rule>
 
+<rule id="pl-sort-key" strength="must">
+
+The `sort_key` of a `propidx` entry is a `u64` in value order. For an inline literal it is the literal's ID. For a dictionary or owned literal it is the ID the value would have if it fit inline, computed by the same transform with the payload truncated: a double's magnitude rounded towards zero (NaN takes the +infinity key and is rejected by the recheck), an integer, date or dateTime clamped to the end of its run, a decimal truncated to 9 fractional digits and clamped, a string's first 7 bytes and a language string's first 5. Entries with equal sort keys are told apart by `value_id` and rechecked on decode, so a range filter on any literal kind is a key range followed by a recheck of its two boundary groups ([[02-id-encoding#Inline literals]]).
+
+</rule>
+
 ### Literal predicate scans
 
-Literal-valued statements are not in the orderings, so a pattern `?x :age ?v` without a value index on `:age` has no index to drive it. Until a value index exists it scans every property record; this is open ([[open-questions#Literal predicate scan without value index]]).
+Literal-valued statements are not in the orderings. A pattern `?x :age ?v` reads the `plist` range of `:age` and then one property record per node; with a value index, a filter on `?v` reads a `propidx` range instead ([[adr:0022]]).
 
 ### Property record
 
@@ -114,7 +128,7 @@ A property record holds all inline properties of one node, sorted by predicate t
 
 <rule id="pl-props-value-kinds" strength="must">
 
-An entry's value is an inline literal ID, a dictionary literal ID, or a statement ID. A statement ID means the property is promoted and the value lives in `stmt` ([[01-data-model#Promotion]]).
+An entry's value is an inline literal ID, a dictionary literal ID (interned or owned), or a statement ID. A statement ID means the property is promoted and the value lives in `stmt` ([[01-data-model#Promotion]]). An owned literal in a slot is deleted when the slot is overwritten or removed ([[03-dictionary#Owned literals]]).
 
 </rule>
 
@@ -141,13 +155,13 @@ Owned by [[09-graphs#Chunk membership]] and [[09-graphs#Extra membership]]; list
 | --- | --- | --- |
 | `gchunk` | `chunk_no` 8 B | `(graph: u64, kind: u64)` |
 | `kind_chunk` | `(kind, chunk_no)` 16 B | — |
-| `gmem` | `(g, id)` 16 B | `(flags: u8, ptr: u64)`: extra membership or exclusion from the home graph, plus promoted membership statement ID |
+| `gmem` | `(g, id)` 16 B | `(flags: u8, ptr: u64)`: extra membership, or a `moved` tombstone that removes the home membership, plus promoted membership statement ID |
 | `gmem_rev` | `(id, g)` 16 B | — |
-| `in_star` | `(child, ancestor)` 16 B | `paths: u32` path count for counting maintenance |
+| `in_star` | `(child, ancestor)` 16 B | — (a set; [[adr:0029]]) |
 
 ### Other tables
 
-The dictionary is specified in [[03-dictionary#Layout]] (`ns_fwd`, `ns_rev`, `dict_fwd`, `dict_rev`). Derived facts of materialized rules live in tables named `drv_<rule>` ([[13-datalog#Materialized maintenance]]). Vector tables are named `vec_<index>` ([[15-vector-index#IVF-PQ layout]]).
+The dictionary is specified in [[03-dictionary#Layout]] (`ns_fwd`, `ns_rev`, `dict_fwd`, `dict_rev`). Derived facts of materialized rules live in tables named `drv_<rule>` ([[13-datalog#Materialized maintenance]]). Vector tables are named `vec_<index>` ([[15-vector-index#IVF layout]]).
 
 ### Partitioned graph tables
 
@@ -173,13 +187,13 @@ Every multi-byte integer outside a key is little-endian, on every platform ([[ad
 
 <input>
 
-Statement `(s = 0x1000_0000_0000_0005, p = 0x1000_0000_0000_0002, o = 0x8180_0000_0000_002A, the inline integer 42)`, a promoted property, stored in `pos`.
+Statement `(s = 0x1000_0000_0000_0005, p = 0x1000_0000_0000_0002, o = 0xC200_0000_0000_002A, the inline integer 42)`, a promoted property, stored in `pos`.
 
 </input>
 
 <output>
 
-Key bytes: `10 00 00 00 00 00 00 02 | 81 80 00 00 00 00 00 2A | 10 00 00 00 00 00 00 05` (p, o, s). A range filter on the integer is a contiguous key interval under prefix `p`. Unpromoted literal values are found the same way in `propidx`, whose key also starts `(pred, value)`.
+Key bytes: `10 00 00 00 00 00 00 02 | C2 00 00 00 00 00 00 2A | 10 00 00 00 00 00 00 05` (p, o, s). The object is class `11`, subtype `0x0`, payload 2^57 + 42. A range filter on integers is a contiguous key interval under prefix `p`. Unpromoted literal values are found the same way in `propidx`, whose key also starts `(pred, sort_key)`.
 
 </output>
 
@@ -260,7 +274,7 @@ The handover estimate was 224 B with six orderings and the ID in the key; three 
 
 ### v1, per inline property
 
-One 16-byte entry in the owner's property record; no ordering entries and no `stmt` record unless promoted. A value index adds a 24-byte `propidx` entry.
+One 16-byte entry in the owner's property record; no ordering entries and no `stmt` record unless promoted. The first value of a predicate on a node adds a 16-byte `plist` entry; a value index adds a 32-byte `propidx` entry.
 
 ### v2
 
@@ -287,7 +301,8 @@ The layout is identical on every platform: little-endian values, big-endian keys
 These tests check the on-disk contract and the consistency invariants between tables.
 
 - Golden files: a fixed small dataset written by the encoder must match checked-in bytes; any change fails until the format version is bumped.
-- Cross-table invariant checker: for every `stmt` record, exactly one entry exists in each base ordering (or multi table), and vice versa; runs after every randomized test.
+- Cross-table invariant checker: for every `stmt` record, exactly one entry exists in each base ordering (or multi table), and vice versa; `plist` equals the set of `(p, n)` with an unpromoted property; runs after every randomized test.
+- Value index ranges: for random literals of every kind, a `propidx` range plus recheck returns exactly the values a full scan returns.
 - v2 block fuzzing: random insert/delete sequences against v1 as oracle; iteration and seek results must match.
 - Size benchmark: [[17-benchmarks#Ordering count comparison]].
 
@@ -298,4 +313,3 @@ Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]]
 - [[open-questions#Large property records]]
 - [[open-questions#Page size on redb]]
 - [[open-questions#Value index drop policy]]
-- [[open-questions#Literal predicate scan without value index]]

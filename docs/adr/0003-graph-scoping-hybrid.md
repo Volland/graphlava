@@ -47,3 +47,5 @@ The planner must choose between range-driven, filter-driven and partitioned plan
 
 </consequence>
 
+
+Amended by [ADR-0024](0024-quad-semantics-membership.md) (2026-11-24): statement uniqueness holds per store (global tables or one partitioned graph), and unions across stores deduplicate.

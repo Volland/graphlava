@@ -50,3 +50,5 @@ Sparse `(graph, kind)` pairs waste part of a chunk. The planner reads a small `k
 ## More Information
 
 Refines handover sections 5.1 and 5.2.
+
+Amended by [ADR-0024](0024-quad-semantics-membership.md) (2026-11-24): moving or dropping a home graph leaves a `moved` tombstone in `gmem`; items still in other graphs survive a drop.
