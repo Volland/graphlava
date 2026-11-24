@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A worked example · graphlava mini book</title>
+<meta name="description" content="The whole running example in one place: one agent&#x27;s memory, written step by step, queried across its layers, and then partly deleted. Every piece comes from an earlier chapter.">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="A worked example">
+<meta property="og:description" content="The whole running example in one place: one agent&#x27;s memory, written step by step, queried across its layers, and then partly deleted. Every piece comes from an earlier chapter.">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Chapter 10</p>
+<h1>A worked example</h1>
+<p class="standfirst">The whole running example in one place: one agent's memory, written step by step, queried across its layers, and then partly deleted. Every piece comes from an earlier chapter.</p>
+
+<p>The prefix <code>:</code> is <code>&lt;http://example.org/&gt;</code> throughout. <code>:in</code> is the spec's shorthand for the system membership predicate, whose final IRI is open. Steps marked <em>sketch</em> use syntax the spec has not fixed yet.</p>
+
+<h2>Step 1: the schema</h2>
+<p>From chapter 8, the meta-model declares <code>:met</code> as a multi predicate, <code>:worksAt</code> as a functional predicate (one employer per person, updated in place), and <code>:Meeting</code> as a fixed-arity hyperedge type with three roles, <code>:agent</code>, <code>:target</code> and <code>:topic</code>, plus a literal attribute <code>:when</code>. Everything else uses the defaults: one statement per <code>(s, p, o)</code>, literals stored inline.</p>
+
+<h2>Step 2: the containers</h2>
+<pre><code>INSERT DATA {
+  :session7    :in :aliceMemory .
+  :aliceMemory :in :agentMemory .
+  :session7    :startedAt "2026-11-20T09:00:00Z"^^xsd:dateTime .
+}</code></pre>
+<p>Two nesting edges. The <code>in_star</code> closure now holds <code>(:session7, :aliceMemory)</code>, <code>(:session7, :agentMemory)</code> and <code>(:aliceMemory, :agentMemory)</code>. The start time is an inline property of the graph node.</p>
+
+<h2>Step 3: facts with layers</h2>
+<pre><code>INSERT DATA {
+  GRAPH :session7 {
+    :alice :worksAt :acme {| :confidence 0.9 ;
+                             :source :chat12 {| :checkedBy :carol |} |} .
+    :bob   :worksAt :acme {| :confidence 0.7 |} .
+  }
+}</code></pre>
+<p>This writes, with home graph <code>:session7</code>:</p>
+<pre><code>s1 = (:alice, :worksAt, :acme)       <span class="c"># orderings + stmt</span>
+     (s1, :confidence, 0.9)          <span class="c"># inline property of s1, no ID</span>
+s3 = (s1, :source, :chat12)          <span class="c"># orderings + stmt</span>
+s4 = (s3, :checkedBy, :carol)        <span class="c"># an annotation of an annotation</span>
+s5 = (:bob, :worksAt, :acme)
+     (s5, :confidence, 0.7)          <span class="c"># inline, no ID</span></code></pre>
+
+<h2>Step 4: the meeting</h2>
+<pre><code><span class="c"># sketch, syntax not final: lowers to CreateHedge(:Meeting, roles), home graph :session7</span>
+create :Meeting { :agent :alice, :target :bob, :topic :pricing }
+        :when "2026-11-20"^^xsd:date  in :session7
+<span class="c"># returns e1: one hedge record, three incidence keys, and :when in props[e1]</span></code></pre>
+<p>Then a statement about the meeting, and a promoted role:</p>
+<pre><code>INSERT { ?e :ledTo :priceChange .
+         ?e :agent :alice {| :confidence 0.7 |} . }
+WHERE  { ?e a :Meeting ; :agent :alice ; :target :bob ; :topic :pricing }</code></pre>
+<p><code>(e1, :ledTo, :priceChange)</code> is an ordinary statement with <code>e1</code> as subject. The role <code>(e1, :agent, :alice)</code> is promoted: it gets an ID in <code>hedge_promo</code> and carries the confidence.</p>
+
+<h2>Step 5: an annotated membership</h2>
+<p>The summarizer filed <code>s1</code> under the session. That is a statement about the membership triple, so the membership is promoted:</p>
+<pre><code>INSERT { ?r :in :session7 {| :filedBy :summarizer |} . }
+WHERE  { &lt;&lt; :alice :worksAt :acme ~ ?r &gt;&gt; }</code></pre>
+
+<h2>Step 6: a rule</h2>
+<pre><code>@prefix : &lt;http://example.org/&gt; .
+colleague(?x, ?y) :- :worksAt(?x, ?o), :worksAt(?y, ?o), ?x != ?y .</code></pre>
+<p>Stored with <code>define</code>, it is part of the meta-model. It runs on demand.</p>
+
+<h2>Querying across the layers</h2>
+<h3>Q1. What does the agent believe about employers, with confidence, anywhere in its memory?</h3>
+<pre><code>SELECT ?who ?org ?c WHERE {
+  GRAPH :agentMemory { &lt;&lt; ?who :worksAt ?org ~ ?r &gt;&gt; }
+  ?r :confidence ?c .
+}</code></pre>
+<p>Two rows: Alice at Acme (0.9), Bob at Acme (0.7). Both facts are two levels down, and the transitive scope finds them. With <code>GRAPH! :agentMemory</code> the result is empty.</p>
+
+<h3>Q2. Where did that come from, and who checked it?</h3>
+<pre><code>SELECT ?src ?checker WHERE {
+  &lt;&lt; :alice :worksAt :acme ~ ?r &gt;&gt; .
+  &lt;&lt; ?r :source ?src ~ ?r2 &gt;&gt; .
+  ?r2 :checkedBy ?checker .
+}</code></pre>
+<p><code>:chat12</code>, checked by <code>:carol</code>. Two reifier bindings, no <code>rdf:reifies</code> joins.</p>
+
+<h3>Q3. Which meetings did Alice call, and what came of them?</h3>
+<pre><code>SELECT ?e ?with ?topic ?outcome WHERE {
+  ?e a :Meeting ; :agent :alice ; :target ?with ; :topic ?topic .
+  OPTIONAL { ?e :ledTo ?outcome }
+}</code></pre>
+<p>One <code>incidence</code> prefix scan on <code>(:alice, :agent, :Meeting)</code>, a record read for <code>e1</code>, and one ordering lookup for <code>:ledTo</code>.</p>
+
+<h3>Q4. Which episode holds each fact?</h3>
+<pre><code>SELECT ?who ?ep WHERE { GRAPH ?ep { ?who :worksAt :acme } }</code></pre>
+<p><code>?ep = :session7</code> for both: <code>GRAPH ?g</code> binds direct graphs, never ancestors.</p>
+
+<h3>Q5. Alice's colleagues</h3>
+<pre><code>?- colleague(:alice, ?who) .</code></pre>
+<p><code>:bob</code>. The fact <code>colleague(:alice, :bob)</code> exists only for this query; it has no ID.</p>
+
+<h2>What the store holds</h2>
+<div class="tablewrap"><table>
+  <tr><th>Item</th><th>Kind</th><th>Has an ID?</th><th>Stored in</th></tr>
+  <tr><td><code>s1</code>, <code>s5</code> worksAt facts</td><td>statement</td><td>yes</td><td>3 orderings + <code>stmt</code></td></tr>
+  <tr><td>confidences 0.9, 0.7</td><td>inline property</td><td>no</td><td>the statement's property record</td></tr>
+  <tr><td><code>s3</code> source, <code>s4</code> checkedBy</td><td>statement (annotation)</td><td>yes</td><td>orderings + <code>stmt</code></td></tr>
+  <tr><td><code>e1</code> meeting</td><td>hyperedge</td><td>yes (kind <code>0x6</code>)</td><td><code>hedge</code> + 3 <code>incidence</code> keys</td></tr>
+  <tr><td>role <code>(e1, :agent, :alice)</code></td><td>promoted role</td><td>yes</td><td><code>hedge_promo</code></td></tr>
+  <tr><td>other roles of <code>e1</code></td><td>virtual role triples</td><td>no</td><td>the record</td></tr>
+  <tr><td><code>(e1, :when, 2026-11-20)</code></td><td>literal attribute (inline property)</td><td>no</td><td><code>props[e1]</code>; no incidence key</td></tr>
+  <tr><td><code>(e1, :ledTo, :priceChange)</code></td><td>statement</td><td>yes</td><td>orderings + <code>stmt</code></td></tr>
+  <tr><td><code>(s1, :in, :session7)</code></td><td>promoted membership</td><td>yes</td><td>pointer in <code>gmem</code> under the home flag</td></tr>
+  <tr><td><code>(s5, :in, :session7)</code></td><td>home membership</td><td>no</td><td>nothing: read from the ID's chunk</td></tr>
+  <tr><td>nesting edges</td><td>virtual <code>:in</code> triples between graphs</td><td>no (an ID only if annotated)</td><td><code>gparent</code>, <code>gchild</code>, closure in <code>in_star</code></td></tr>
+  <tr><td><code>colleague(:alice, :bob)</code></td><td>derived fact</td><td>no</td><td>nowhere (on demand)</td></tr>
+</table></div>
+
+<h2>Deleting</h2>
+<p>Alice left Acme, and the agent deletes the fact:</p>
+<pre><code>DELETE DATA { :alice :worksAt :acme . }</code></pre>
+<div class="tablewrap"><table>
+  <tr><th>Item</th><th>What happens</th><th>Why</th></tr>
+  <tr><td><code>s1</code></td><td>deleted</td><td>the target</td></tr>
+  <tr><td>confidence 0.9</td><td>deleted</td><td>an inline property of <code>s1</code></td></tr>
+  <tr><td><code>s3</code>, then <code>s4</code></td><td>deleted</td><td>subject is <code>s1</code>, then <code>s3</code>: transitive cascade</td></tr>
+  <tr><td>the promoted membership and its <code>:filedBy</code></td><td>deleted</td><td><code>s1</code>'s <code>gmem</code> entries go, and the promoted statement cascades</td></tr>
+  <tr><td><code>e1</code> and its roles</td><td>unchanged</td><td><code>e1</code> refers to <code>:alice</code>, not to <code>s1</code></td></tr>
+  <tr><td><code>colleague(:alice, :bob)</code></td><td>no longer derived</td><td>on-demand rules read the current data</td></tr>
+</table></div>
+<p>The <code>DELETE</code> has no graph clause, so it deletes the statement itself. Written inside <code>GRAPH :session7 { … }</code> it would remove only the membership in <code>:session7</code> (ADR 0024); since that is <code>s1</code>'s only graph, the statement would go the same way. Had another episode also asserted the fact, it would have survived there.</p>
+<p>Deleting <code>:bob</code> outright would fail with <code>ReferencedByHyperedge</code>, because he fills the target role of <code>e1</code>. With <code>DETACH</code> the meeting goes too, and with it <code>(e1, :ledTo, :priceChange)</code> and the promoted role.</p>
+<p>graphlava keeps no history, so after the delete the agent cannot ask what it used to believe. If it needs to, the memory belongs in tiramemsu, or the change should be modelled as data (for example an <code>:until</code> annotation instead of a delete).</p>
+
+<div class="note">
+<p><strong>In graphlava.</strong> One memory used all four metagraph kinds: annotations to two levels, a hyperedge with a promoted role, nested containers with an annotated membership, and a rule in the meta-model. Only the parts that were annotated or written as node-valued statements got IDs and index entries.</p>
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Each layer of the memory was one ordinary write, and each question one query.</li>
+  <li>Most of what the store holds has no ID of its own until something needs to point at it.</li>
+  <li>Deletes follow annotations down and are blocked by hyperedge roles; inside a graph clause they remove only that membership.</li>
+</ul>
+
+<div class="pager">
+  <a class="prev" href="09-fold-unfold-reasoning.html">← Chapter 9</a>
+  <a href="index.html">Contents</a>
+  <a class="next" href="11-choosing.html">Chapter 11: Choosing an encoding →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

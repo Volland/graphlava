@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Containers: named and nested graphs · graphlava mini book</title>
+<meta name="description" content="The second metagraph power: a vertex that holds a subgraph and is still a vertex. In a statement graph that vertex is a named graph. This chapter covers membership, nesting, scope, and how to make an ">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Containers: named and nested graphs">
+<meta property="og:description" content="The second metagraph power: a vertex that holds a subgraph and is still a vertex. In a statement graph that vertex is a named graph. This chapter covers membership, nesting, scope, and how to make an ">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Chapter 7</p>
+<h1>Containers: named and nested graphs</h1>
+<p class="standfirst">The second metagraph power: a vertex that holds a subgraph and is still a vertex. In a statement graph that vertex is a named graph. This chapter covers membership, nesting, scope, and how to make an edge hold a subgraph.</p>
+
+<h2>A graph is a node</h2>
+<p>A named graph groups statements. In RDF the name is an IRI, and membership is the fourth column of a quad. In a statement graph, membership is one more statement:</p>
+<pre><code>(s1, :in, :session7)          <span class="c"># s1 is in the episode</span>
+(:session7, :in, :aliceMemory) <span class="c"># the episode is in Alice's memory</span></code></pre>
+<p>Because the graph's name is a term, the graph can be described like anything else: <code>(:session7, :startedAt, "2026-11-20T09:00Z")</code>. That is Gapanyuk's metavertex: it contains statements, and it is a vertex.</p>
+<p>In graphlava a graph has its own ID kind (tag <code>0x5</code>). Writing into a graph uses standard SPARQL:</p>
+<pre><code>PREFIX : &lt;http://example.org/&gt;
+INSERT DATA {
+  GRAPH :session7 {
+    :alice :worksAt :acme {| :confidence 0.9 ; :source :chat12 |} .
+  }
+}</code></pre>
+
+<h2>Membership that costs nothing</h2>
+<p>Most statements live in exactly one graph. graphlava's spec makes that case free. IDs are allocated in <strong>chunks</strong> of 2<sup>20</sup> consecutive IDs, and each chunk is leased to one graph and one kind of item. The home graph of a statement is a function of its ID: look up the chunk. No membership row is stored.</p>
+<div class="tablewrap"><table>
+  <tr><th>Membership</th><th>Stored as</th><th>Cost per item</th></tr>
+  <tr><td>Home graph (one per item, fixed at allocation)</td><td>the ID's chunk, via <code>gchunk</code></td><td>0 bytes</td></tr>
+  <tr><td>Extra graph</td><td>one key in <code>gmem</code> <code>(g, item)</code> and one in <code>gmem_rev</code> <code>(item, g)</code></td><td>2 keys</td></tr>
+</table></div>
+<p>So "all statements in <code>:session7</code>" is a set of ID ranges, not a scan. A statement learned in the session and also filed under a project belongs to both: home <code>:session7</code>, extra <code>:pricingProject</code>.</p>
+<p>The membership triple <code>(x, :in, g)</code> is <strong>virtual</strong>, like the other virtual statements of chapter 6. It has no statement ID until something annotates it (ADR 0017). Annotate it, "Bob filed this under the project", and the spec allocates an ID and stores it as the <code>gmem</code> value.</p>
+
+<h3>One statement, many graphs</h3>
+<p>A fact keeps one ID however many graphs hold it (ADR 0024). Graph clauses then behave like SPARQL datasets, without a copy per graph:</p>
+<div class="tablewrap"><table>
+  <tr><th>Write</th><th>Effect (spec)</th></tr>
+  <tr><td><code>INSERT</code> an existing triple into another graph</td><td>Adds a membership of that graph. Same statement, same ID, same annotations.</td></tr>
+  <tr><td><code>DELETE</code> a triple inside <code>GRAPH g</code></td><td>Removes only the membership in g. The statement is deleted, with its cascade, when its last membership goes.</td></tr>
+  <tr><td>Move from g to h</td><td>Adds h, removes g, in one transaction. The ID and home chunk stay; a <code>moved</code> tombstone in <code>gmem</code> hides the old home membership.</td></tr>
+  <tr><td><code>DROP GRAPH g</code></td><td>Removes every membership in g. Items still in another graph survive; the rest are deleted.</td></tr>
+</table></div>
+<p>Two episodes can assert the same fact and each keep its own metadata. Per-episode provenance goes on the promoted membership, not on the fact:</p>
+<pre><code><span class="c"># one fact, two memberships; the spec writes a membership as &lt;&lt; X :in g &gt;&gt;</span>
+s1 = (:alice, :worksAt, :acme)
+m7 = (s1, :in, :session7)        <span class="c"># promoted when annotated</span>
+m9 = (s1, :in, :session9)
+(m7, :confidence, 0.9)           <span class="c"># session 7 was sure</span>
+(m9, :confidence, 0.6)           <span class="c"># session 9 less so</span></code></pre>
+<p>Uniqueness of <code>(s, p, o)</code> holds per store: the global tables, or one partitioned graph's own tables. A triple stored both in a partition and globally therefore has two IDs, and a query over both deduplicates it.</p>
+
+<h2>Nesting is a DAG</h2>
+<p>Graphs nest through <code>(child, :in, parent)</code>. graphlava allows several parents and forbids cycles:</p>
+<figure>
+<svg viewBox="0 0 640 220" role="img" aria-label="A nesting DAG. agentMemory is at the top. aliceMemory and pricingProject are under it. session7 is under both aliceMemory and pricingProject. The statement s1 is in session7.">
+  <g stroke="#c9852c" stroke-width="3" fill="none">
+    <path d="M200 110 L300 52"/><path d="M440 110 L340 52"/>
+    <path d="M200 140 L300 172"/><path d="M440 140 L340 172"/>
+  </g>
+  <g font-family="-apple-system, Segoe UI, Roboto, Arial, sans-serif" font-size="14" text-anchor="middle" stroke="#3a2208" stroke-width="2.5">
+    <rect x="240" y="18" width="160" height="36" rx="10" fill="#f2b84b"/>
+    <rect x="110" y="106" width="170" height="36" rx="10" fill="#f2b84b"/>
+    <rect x="360" y="106" width="170" height="36" rx="10" fill="#f2b84b"/>
+    <rect x="245" y="168" width="150" height="36" rx="10" fill="#f2b84b"/>
+    <ellipse cx="560" cy="186" rx="46" ry="18" fill="#fff3d6"/>
+    <g fill="#3a2208" stroke="none">
+      <text x="320" y="41">:agentMemory</text>
+      <text x="195" y="129">:aliceMemory</text>
+      <text x="445" y="129">:pricingProject</text>
+      <text x="320" y="191">:session7</text>
+      <text x="560" y="191">s1</text>
+    </g>
+  </g>
+  <path d="M514 186 H398" stroke="#c9852c" stroke-width="3" stroke-dasharray="4 5"/>
+</svg>
+<figcaption>Each line joins a parent (above) to a child (below). <code>:session7</code> has two parents, and <code>:pricingProject</code> sits directly under <code>:agentMemory</code>. The statement <code>s1</code> is a direct member of <code>:session7</code> only, and in the scope of all four graphs.</figcaption>
+</figure>
+<pre><code>(:session7,      :in, :aliceMemory)
+(:session7,      :in, :pricingProject)
+(:aliceMemory,   :in, :agentMemory)
+(:pricingProject,:in, :agentMemory)</code></pre>
+<div class="tablewrap"><table>
+  <tr><th>Rule (spec)</th><th>Effect</th></tr>
+  <tr><td>No cycles</td><td>Adding <code>(a, :in, b)</code> fails with <code>GraphCycle</code> when <code>a = b</code> or b is already under a. The check is one point read.</td></tr>
+  <tr><td>Depth limit</td><td>Default 64 levels, configurable; past it, <code>GraphDepthExceeded</code>.</td></tr>
+  <tr><td>Closure kept current</td><td><code>in_star(descendant, ancestor)</code> holds the transitive closure as a set of pairs, updated in the writer transaction. There are no path counts (ADR 0029): removing a parent link recomputes the ancestors of the graphs below it, so one of two parent links can go without losing a still-reachable ancestor.</td></tr>
+</table></div>
+<p>The <code>:in</code> above is the spec's shorthand. The IRI of the system's membership predicate is still an open question.</p>
+
+<h2>Scope: what a GRAPH clause sees</h2>
+<p>The <strong>scope</strong> of a graph is the graph and every graph nested under it. graphlava's <code>GRAPH</code> matches the scope by default (ADR 0007). A new keyword, <code>GRAPH!</code>, matches direct members only.</p>
+<div class="tablewrap"><table>
+  <tr><th>Syntax</th><th>Matches</th><th><code>s1</code> found via</th></tr>
+  <tr><td><code>GRAPH :agentMemory { P }</code></td><td>statements in the graph or anywhere under it, each once</td><td>yes</td></tr>
+  <tr><td><code>GRAPH! :agentMemory { P }</code></td><td>direct members only</td><td>no</td></tr>
+  <tr><td><code>GRAPH ?g { P }</code></td><td>binds <code>?g</code> to each <em>direct</em> graph of the match, never an ancestor</td><td><code>?g = :session7</code></td></tr>
+  <tr><td><code>FROM :g</code></td><td>the default graph is the scope of <code>:g</code></td><td></td></tr>
+</table></div>
+<pre><code><span class="c"># everything the agent believes about employers, at any depth</span>
+SELECT ?who ?org WHERE { GRAPH :agentMemory { ?who :worksAt ?org } }
+
+<span class="c"># which episode did each fact come from, and which memories hold that episode?</span>
+SELECT ?who ?ep ?mem WHERE {
+  GRAPH ?ep { ?who :worksAt :acme }
+  ?ep :in* ?mem .
+}</code></pre>
+<p>Standard SPARQL means direct membership. A connection flag, <code>graph_scope = direct</code>, restores it, and the W3C test suites run with it.</p>
+
+<h3>How a scope is read</h3>
+<p>The planner picks one of three plans per scoped pattern, from per-graph statistics:</p>
+<div class="tablewrap"><table>
+  <tr><th>Plan</th><th>When</th><th>Cost</th></tr>
+  <tr><td>range-driven</td><td>the scope is small: read its ID ranges, filter by the pattern</td><td>O(items in scope)</td></tr>
+  <tr><td>filter-driven</td><td>the pattern is selective and the scope large: scan the pattern, test each ID against the scope bitmap</td><td>O(matches)</td></tr>
+  <tr><td>partitioned</td><td>the graph was declared partitioned and has its own tables</td><td>O(matches in g)</td></tr>
+</table></div>
+<p>A query over one small episode costs in proportion to the episode, not the database. <code>DROP GRAPH g</code> removes every membership in g: items that are still in another graph survive, the others are deleted and cascade to their annotations. <code>DROP RECURSIVE GRAPH g</code> also drops descendants that have no other surviving parent.</p>
+
+<h2>Edges as containers</h2>
+<p>Combine both powers and an edge can hold a subgraph: the meeting <code>e1</code> holds its minutes. graphlava's graph IDs and hyperedge IDs are different kinds, so a hyperedge or statement is not itself a graph name. The pattern is a graph linked to the edge:</p>
+<pre><code><span class="c"># the minutes of meeting e1 are a graph; ?e is the meeting's hyperedge ID</span>
+INSERT { ?e :minutes :e1minutes . }
+WHERE  { ?e a :Meeting ; :agent :alice ; :target :bob ; :topic :pricing }
+
+INSERT DATA { GRAPH :e1minutes { :bob :proposed :discount10 . } }
+
+<span class="c"># open the meeting</span>
+SELECT ?s ?p ?o WHERE {
+  ?e a :Meeting ; :agent :alice ; :minutes ?m .
+  GRAPH ?m { ?s ?p ?o }
+}</code></pre>
+<p>The link <code>(e1, :minutes, :e1minutes)</code> has <code>e1</code> as subject, so deleting the meeting deletes the link by cascade. The minutes graph itself stays until dropped. tiramemsu goes one step further: a graph can be named by a statement, <code>GRAPH &lt;urn:tiramemsu:stmt:1&gt; { … }</code>, so the container follows the edge through corrections and goes with a retraction. In graphlava, make the link part of the edge's life explicitly: drop the minutes graph in the same transaction that deletes the meeting.</p>
+
+<div class="note">
+<p><strong>In graphlava.</strong> Graphs are nodes with their own ID kind. Home membership is free, read from the ID's chunk; extra memberships cost two keys. Membership triples are virtual until annotated. One statement can be in several graphs; deleting inside a graph removes only that membership, and per-episode metadata goes on <code>&lt;&lt; X :in g &gt;&gt;</code>. Nesting is a DAG with cycle and depth checks and a maintained closure. <code>GRAPH :g</code> sees the whole scope, <code>GRAPH! :g</code> only direct members, and <code>GRAPH ?g</code> binds direct graphs.</p>
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>A container is a named graph whose name is also a node.</li>
+  <li>Nesting as a DAG lets an episode belong to a person's memory and a project at once.</li>
+  <li>A fact in several graphs is one statement with several memberships; put per-episode metadata on the membership.</li>
+  <li>Transitive scope makes "everything under this memory" one clause instead of a union.</li>
+  <li>For an edge that holds a subgraph, link a graph to the edge and manage their lifetimes together.</li>
+</ul>
+
+<div class="pager">
+  <a class="prev" href="06-statements-about-statements.html">← Chapter 6</a>
+  <a href="index.html">Contents</a>
+  <a class="next" href="08-meta-model.html">Chapter 8: The meta-model →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

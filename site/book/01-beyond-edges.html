@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graphs, and where they stop · graphlava mini book</title>
+<meta name="description" content="A binary edge is the best tool for most facts. This chapter finds the facts it cannot hold, and names the four signs that a model has outgrown it.">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Graphs, and where they stop">
+<meta property="og:description" content="A binary edge is the best tool for most facts. This chapter finds the facts it cannot hold, and names the four signs that a model has outgrown it.">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Chapter 1</p>
+<h1>Graphs, and where they stop</h1>
+<p class="standfirst">A binary edge is the best tool for most facts. This chapter finds the facts it cannot hold, and names the four signs that a model has outgrown it.</p>
+
+<h2>The binary edge</h2>
+<p>A graph has vertices and edges, and each edge joins exactly two vertices. In RDF the edge is a triple: subject, predicate, object.</p>
+<pre><code>:alice :worksAt :acme .
+:bob   :worksAt :acme .
+:alice :knows   :bob .</code></pre>
+<p>This is a good model. It is easy to store (three columns), easy to index (sort by any column order), and easy to query (patterns join on shared variables). Most facts in an agent's memory are binary, and they should stay binary.</p>
+
+<h2>A meeting of three</h2>
+<p>Now the agent learns two things:</p>
+<ul>
+  <li>On 2026-11-20 Alice met Bob about pricing.</li>
+  <li>On 2026-11-21 Alice met Carol about hiring.</li>
+</ul>
+<p>Each meeting has four parts: who called it, who attended, the topic, the day. Try to write the first one as binary edges:</p>
+<pre><code>:alice :met       :bob .
+:alice :discussed :pricing .
+:bob   :discussed :pricing .
+:alice :metOn     "2026-11-20"^^xsd:date .</code></pre>
+<p>Add the second meeting the same way and read the result back:</p>
+<div class="tablewrap"><table>
+  <tr><th>Edge</th><th>Which meeting?</th></tr>
+  <tr><td><code>:alice :met :bob</code></td><td>first</td></tr>
+  <tr><td><code>:alice :met :carol</code></td><td>second</td></tr>
+  <tr><td><code>:alice :discussed :pricing</code></td><td>first, but nothing says so</td></tr>
+  <tr><td><code>:alice :discussed :hiring</code></td><td>second, but nothing says so</td></tr>
+  <tr><td><code>:alice :metOn "2026-11-20"</code></td><td>either</td></tr>
+  <tr><td><code>:alice :metOn "2026-11-21"</code></td><td>either</td></tr>
+</table></div>
+<p>The question "what did Alice and Bob talk about?" now has two answers, and one of them is wrong. The edges are all true. What is lost is the <em>grouping</em>: which four facts belong to one event.</p>
+
+<h2>The decomposition problem</h2>
+<p>This is the general problem. A relation with k parts, split into binary edges, keeps the parts and drops the fact that they belong together. There are three common patches, and each moves the problem somewhere else.</p>
+<div class="tablewrap"><table>
+  <tr><th>Patch</th><th>What it does</th><th>What it costs</th></tr>
+  <tr><td>Edge properties (property graphs)</td><td>Put <code>topic</code> and <code>day</code> on the <code>:met</code> edge</td><td>A property holds a value, not a node: <code>:pricing</code> becomes a string. A third attendee still needs a second edge.</td></tr>
+  <tr><td>Compound predicates</td><td><code>:metAboutPricing</code></td><td>One predicate per combination; nothing can be queried by topic.</td></tr>
+  <tr><td>Application glue</td><td>Keep a meeting table outside the graph</td><td>Two sources of truth that drift. Graph queries cannot see the table.</td></tr>
+</table></div>
+<p>The fix that works is to make the meeting a thing. Give it an identity, and hang each part off it as a role:</p>
+<pre><code>e1 :agent  :alice .
+e1 :target :bob .
+e1 :topic  :pricing .
+e1 :when   "2026-11-20"^^xsd:date .</code></pre>
+<p>That is a hyperedge, encoded as a node with role edges. Chapter 2 treats hyperedges properly, and chapter 5 compares the ways to store one.</p>
+
+<h2>The hypergraph wall</h2>
+<p>A hypergraph lets one edge join any number of vertices, so it holds the meeting directly. But in a hypergraph an edge is a set of vertices, not a vertex. It cannot appear inside another edge. That limit is called the <em>hypergraph wall</em>. You have hit it when you need any of these four things:</p>
+<div class="tablewrap"><table>
+  <tr><th>#</th><th>Symptom</th><th>In the running example</th></tr>
+  <tr><td>1</td><td>A statement <strong>about</strong> a relationship</td><td>"<code>:alice :worksAt :acme</code> has confidence 0.9 and came from <code>:chat12</code>."</td></tr>
+  <tr><td>2</td><td>A relationship <strong>between</strong> relationships</td><td>"Meeting <code>e1</code> led to the decision to change prices."</td></tr>
+  <tr><td>3</td><td>Rich properties on a relationship <strong>as a thing</strong></td><td>"<code>e1</code> has minutes, a room and an outcome, and the outcome has an author."</td></tr>
+  <tr><td>4</td><td><strong>Nested</strong> meta-relationships</td><td>"The agent believes that <code>:chat12</code> reported that Alice works at Acme."</td></tr>
+</table></div>
+<p>Symptom 1 alone already breaks plain triples, since a triple cannot be the subject of another triple. Symptoms 2 to 4 break hypergraphs too. Agent memory has all four. Confidence, provenance and belief are statements about statements, and episodes are groups of facts that are themselves talked about.</p>
+
+<div class="note">
+<p><strong>Grouping is primitive or derived.</strong> In a hyperedge the grouping is part of the structure. In a node with role edges the grouping is derived: you find it by following the edges from <code>e1</code>. Queries can return the same rows, but a store can only enforce "a meeting has exactly one agent" when it knows the group is one thing.</p>
+</div>
+
+<h2>The way past</h2>
+<p>Two moves get past the wall, and the rest of this book is about them.</p>
+<ol>
+  <li><strong>Give every relationship an identity.</strong> Then a relationship can be the subject or object of another one. That is reification, and in a statement graph it costs nothing extra, because every statement already has an ID (chapters 4 and 6).</li>
+  <li><strong>Let a vertex stand for a group.</strong> A graph that is also a node can hold a subgraph and be talked about. That is a container (chapter 7).</li>
+</ol>
+<p>A structure with both moves, applied to any depth, is a metagraph (chapter 3).</p>
+
+<div class="note">
+<p><strong>In graphlava.</strong> The binary fact <code>:alice :worksAt :acme</code> is one statement with a 64-bit ID. The meeting is designed to be one hyperedge record of type <code>:Meeting</code> with three node roles, stored once; its date is a literal property of the meeting. The confidence on the fact is an annotation whose subject is the statement's ID. The episode is a graph, which is also a node. Each of these gets its own chapter.</p>
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Keep binary facts binary. Most facts are.</li>
+  <li>Splitting a k-part relation into binary edges keeps the parts and loses the grouping.</li>
+  <li>The hypergraph wall: a relationship you need to talk about, link, describe or nest must be a thing with an identity.</li>
+</ul>
+
+<div class="pager">
+  <a class="prev" href="index.html">← Contents</a>
+  <a class="next" href="02-hypergraphs.html">Chapter 2: Hypergraphs →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 28 216 192">
+  <title>graphlava</title>
+  <g stroke="#3a2208" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M28 96 L128 156 L128 212 L28 152 Z" fill="#c9852c"/>
+    <path d="M128 156 L228 96 L228 152 L128 212 Z" fill="#a96a1e"/>
+    <path d="M28 124 q25 6 50 30 t50 30 q25 -24 50 -30 t50 -30" fill="none" stroke-width="8"/>
+    <path d="M128 36 L228 96 L128 156 L28 96 Z" fill="#f2b84b"/>
+    <path d="M128 96 L128 62 M128 96 L184 96 M128 96 L128 130 M128 96 L72 96" fill="none" stroke-width="9"/>
+    <ellipse cx="128" cy="96" rx="24" ry="16" fill="#8cc43f"/>
+  </g>
+</svg>

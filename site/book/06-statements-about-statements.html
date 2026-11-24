@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statements about statements · graphlava mini book</title>
+<meta name="description" content="The first metagraph power, edges as vertices, is what agent memory uses most: how sure, where from, who checked. This chapter covers annotations, reifiers, promotion of virtual statements, and what ha">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Statements about statements">
+<meta property="og:description" content="The first metagraph power, edges as vertices, is what agent memory uses most: how sure, where from, who checked. This chapter covers annotations, reifiers, promotion of virtual statements, and what ha">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Chapter 6</p>
+<h1>Statements about statements</h1>
+<p class="standfirst">The first metagraph power, edges as vertices, is what agent memory uses most: how sure, where from, who checked. This chapter covers annotations, reifiers, promotion of virtual statements, and what happens on delete.</p>
+
+<h2>An annotation is a statement</h2>
+<p>An annotation is a statement whose subject is a statement ID. Nothing else about it is special. In the running example:</p>
+<pre><code>s1 = (:alice, :worksAt, :acme)
+s2 = (s1, :confidence, 0.9)
+s3 = (s1, :source, :chat12)</code></pre>
+<p>graphlava's spec stores an annotation like any statement, routed by its object. <code>s3</code> has a node as object, so it goes to the orderings. <code>s2</code> has a literal as object, so it is an inline property in <code>s1</code>'s property record. Reading all of <code>s1</code>'s literal annotations is one record read.</p>
+
+<h2>Writing and reading them in SPARQL 1.2</h2>
+<p>RDF 1.2 has an annotation syntax. The spec compiles it to "insert or find <code>(:alice, :worksAt, :acme)</code> with ID r, then insert the annotations with subject r":</p>
+<pre><code>PREFIX : &lt;http://example.org/&gt;
+INSERT DATA {
+  :alice :worksAt :acme {| :confidence 0.9 ; :source :chat12 |} .
+}</code></pre>
+<p>To read, bind the <strong>reifier</strong> with <code>~</code>. In graphlava the reifier <em>is</em> the statement ID, so binding it is free in every ordering scan. No <code>rdf:reifies</code> triple is stored or joined:</p>
+<pre><code>SELECT ?who ?c ?src WHERE {
+  &lt;&lt; ?who :worksAt :acme ~ ?r &gt;&gt; .
+  ?r :confidence ?c ; :source ?src .
+  FILTER(?c &gt; 0.8)
+}</code></pre>
+<p>The spec's plan for the first two patterns is one scan of the <code>:worksAt</code> statements and one read of the property record. Reifiers come back to clients as IRIs, <code>&lt;urn:meta-core:stmt:{id}&gt;</code>, which can be used in later requests (recommended; the form is still open).</p>
+
+<h2>Annotations of annotations</h2>
+<p>An annotation has an ID too, so it can be annotated. Carol checked the source:</p>
+<pre><code>INSERT DATA {
+  :alice :worksAt :acme {| :source :chat12 {| :checkedBy :carol |} |} .
+}</code></pre>
+<pre><code>s1 = (:alice, :worksAt, :acme)
+s3 = (s1, :source, :chat12)
+s4 = (s3, :checkedBy, :carol)</code></pre>
+<p>Depth is unlimited. Each level is one more statement and one more join in a query.</p>
+
+<h2>Update keeps the ID</h2>
+<p>graphlava stores current state, not history. Updating a statement's object keeps its ID, so annotations stay attached:</p>
+<div class="tablewrap"><table>
+  <tr><th></th><th>Before</th><th>After <code>update(s1, :globex)</code></th></tr>
+  <tr><td><code>s1</code></td><td><code>(:alice, :worksAt, :acme)</code></td><td><code>(:alice, :worksAt, :globex)</code></td></tr>
+  <tr><td><code>s2</code></td><td><code>(s1, :confidence, 0.9)</code></td><td>unchanged, still on <code>s1</code></td></tr>
+</table></div>
+<p>This is the right behaviour for annotations that describe the slot ("this was set by the profile sync") and the wrong one for annotations that describe the old value ("0.9 sure it is Acme"). The application decides which annotations to reset in the same transaction. If you need the old value and its layers kept, that is tiramemsu's job: its <code>supersede</code> writes a new statement and replays the layers onto it.</p>
+<p>The update fails with a conflict if <code>(:alice, :worksAt, :globex)</code> already exists and <code>:worksAt</code> is not a multi predicate.</p>
+<p>A plain <code>set(:alice, :worksAt, :globex)</code> is different: it replaces all values of <code>(:alice, :worksAt)</code> by deleting the old statement and inserting a new one, so the annotations go with the old statement. To get update-in-place from <code>set</code> and <code>insert</code> too, declare the predicate <strong><code>functional</code></strong> (ADR 0028): at most one object per subject. Then a job change rewrites the object of <code>s1</code> and keeps its ID, its <code>:confidence</code> and its <code>:source</code>. <code>functional</code> and <code>multi</code> exclude each other, and the planner treats <code>(s, p)</code> of a functional predicate as a key.</p>
+
+<h2>Virtual statements and promotion</h2>
+<p>Logically, everything in graphlava is a statement. Physically, four kinds of statement are <em>virtual</em>: they answer queries but have no statement ID. They get one when something annotates them. That step is called <strong>promotion</strong>, and it is one-way.</p>
+<div class="tablewrap"><table>
+  <tr><th>Virtual statement</th><th>Served from</th><th>On promotion, the ID lives in</th></tr>
+  <tr><td>inline property <code>(:alice, :age, 34)</code></td><td>the subject's property record</td><td>the property slot (replaced by a pointer) and the orderings</td></tr>
+  <tr><td>hyperedge role <code>(e1, :agent, :alice)</code></td><td><code>hedge</code> and <code>incidence</code></td><td><code>hedge_promo</code>; the role stays served from the record</td></tr>
+  <tr><td>graph membership <code>(s1, :in, :session7)</code></td><td>the ID's chunk, or <code>gmem</code></td><td>the <code>gmem</code> entry</td></tr>
+  <tr><td>derived fact from a rule</td><td>the rule engine</td><td>a stored statement</td></tr>
+</table></div>
+<pre><code><span class="c"># :age is an inline property: no statement ID yet</span>
+INSERT DATA { :alice :age 34 . }
+
+<span class="c"># annotating it promotes it, in the same transaction</span>
+INSERT DATA { :alice :age 34 {| :source :hrRecord |} . }</code></pre>
+<p>Until promotion, a query that binds the reifier of a virtual statement gets no binding, as if it had no reifier. Removing all annotations later does not demote it, and later value updates keep its new ID.</p>
+<div class="note">
+<p><strong>Why bother.</strong> Most values are overwritten often and never annotated: a status, a last-seen time, a counter. Keeping them in one property record means an overwrite is one write instead of seven. The few that need a handle pay for one when they need it.</p>
+</div>
+
+<h2>Delete cascades down the layers</h2>
+<p>Deleting a statement deletes, in the same transaction, every statement whose subject is it, and repeats for each of those. Deleting <code>s1</code> takes <code>s2</code>, <code>s3</code> and <code>s4</code> with it.</p>
+<pre><code>DELETE DATA { :alice :worksAt :acme . }   <span class="c"># removes s1 and its annotations, transitively</span></code></pre>
+<div class="tablewrap"><table>
+  <tr><th>Case</th><th>Behaviour (spec)</th></tr>
+  <tr><td>Annotations of the deleted item</td><td>Deleted, transitively</td></tr>
+  <tr><td><code>KEEP ANNOTATIONS</code> after <code>DELETE</code></td><td>Only the item goes; annotations stay with a dangling subject</td></tr>
+  <tr><td>The item fills a hyperedge role</td><td>Fails with <code>ReferencedByHyperedge</code> unless <code>DETACH</code></td></tr>
+  <tr><td>More than the cascade limit (default 100,000)</td><td>Fails with <code>CascadeLimitExceeded</code> and rolls back</td></tr>
+  <tr><td>Another statement has the item as <em>object</em></td><td>Not an annotation. Undecided in the spec; the recommended option blocks the delete unless <code>DETACH</code>, so no dangling object is created</td></tr>
+</table></div>
+<p>IDs are never reused, so an annotation kept with <code>KEEP ANNOTATIONS</code> can never end up pointing at a new, unrelated statement.</p>
+
+<h2>One reifier per triple</h2>
+<p>By default a predicate allows at most one statement per <code>(s, p, o)</code>. Inserting an existing triple returns its ID and changes nothing. So a triple has exactly one reifier, its ID. RDF 1.2 allows several reifiers for one triple, each with its own annotations; graphlava's recommended answer is that a second reifier IRI becomes an alias of the same ID. This is an open question in the spec, gated on v0.</p>
+<p>When you need several occurrences of one triple, declare the predicate <code>multi</code>. Alice met Bob twice, and each meeting has its own date:</p>
+<pre><code><span class="c"># with :met declared multi, each reifier names its own statement</span>
+INSERT DATA {
+  :alice :met :bob ~ _:m1 {| :when "2026-11-20"^^xsd:date |} .
+  :alice :met :bob ~ _:m2 {| :when "2026-11-27"^^xsd:date |} .
+}</code></pre>
+<p>Whether a reifier may point at a triple that is not asserted, as RDF 1.2 allows for quotes and claims, is also open; the recommended option stores it with an <code>unasserted</code> flag that normal matching skips.</p>
+
+<h2>The epistemic layer</h2>
+<p>An agent needs to know what it knows, and how. In statement terms, that layer is made of three patterns:</p>
+<div class="tablewrap"><table>
+  <tr><th>Pattern</th><th>Shape</th><th>Stored as</th><th>On delete of <code>s1</code></th></tr>
+  <tr><td>Confidence</td><td><code>(s1, :confidence, 0.9)</code></td><td>inline property of <code>s1</code></td><td>goes with it</td></tr>
+  <tr><td>Source</td><td><code>(s1, :source, :chat12)</code></td><td>statement in the orderings</td><td>goes with it</td></tr>
+  <tr><td>Belief that rests on a fact</td><td><code>(:belief7, :supportedBy, s1)</code></td><td>statement; <code>s1</code> is the <em>object</em></td><td>not a cascade; the recommended option blocks the delete unless <code>DETACH</code></td></tr>
+</table></div>
+<p>The last row matters. Under the recommended option, deleting the evidence fails while a belief still points at it. Put the dependency the right way round: if a belief should fall with its evidence, make the belief's link an annotation of the evidence, <code>(s1, :supports, :belief7)</code>, or let a Datalog rule derive the belief (chapter 9), so it is recomputed when its premises change.</p>
+
+<div class="note">
+<p><strong>In graphlava.</strong> An annotation is a statement whose subject is a statement ID, stored by the same routing rule as any statement. The statement ID is the SPARQL reifier. Inline properties, hyperedge roles, memberships and derived facts are statements with no ID until annotated. Deleting a statement cascades to its annotations; a reference from the object position does not cascade, and the recommended option blocks the delete unless <code>DETACH</code>. A predicate declared <code>functional</code> updates in place on <code>set</code>, keeping ID and annotations.</p>
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Statements about statements need nothing but an ID in subject position.</li>
+  <li>graphlava gives IDs lazily: virtual statements are promoted on first annotation, and stay promoted.</li>
+  <li>Updates keep IDs and annotations, and so does <code>set</code> on a <code>functional</code> predicate; reset annotations that described the old value.</li>
+  <li>Delete cascades in the subject direction only; an object-position reference is expected to block it. Model dependencies so they cascade the way you want.</li>
+</ul>
+
+<div class="pager">
+  <a class="prev" href="05-modeling-hyperedges.html">← Chapter 5</a>
+  <a href="index.html">Contents</a>
+  <a class="next" href="07-containers.html">Chapter 7: Containers →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

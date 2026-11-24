@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statement graphs: the one idea under graphlava</title>
+<meta name="description" content="What the Statement Graphs model is, and how graphlava is designed to store it: 64-bit statement IDs, unique statements, inline properties that are promoted on demand, cascade delete, hyperedges and nested graphs.">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Statement graphs: the one idea under graphlava">
+<meta property="og:description" content="One data model under RDF, RDF-star and property graphs, and how graphlava stores it.">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/" aria-current="page">Articles</a>
+    <a href="../book/">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+  <p class="kicker">Article</p>
+  <h1>Statement graphs: the one idea under graphlava</h1>
+  <p class="byline">graphlava articles · 24 November 2026</p>
+  <p class="standfirst">RDF, RDF-star and property graphs can all be read as one kind of graph: a graph of statements, where every statement has an identity. graphlava is designed around that idea. This article explains the model and then the physical choices graphlava makes to store it.</p>
+
+  <h2>The model in one paragraph</h2>
+  <p>In 2023 Ewout Gelling, George Fletcher and Michael Schmidt described <em>Statement Graphs</em>, a single data model under RDF, RDF-star and labeled property graphs. The full version appeared at DASFAA 2024. A statement graph is a directed acyclic graph with two kinds of vertex. Leaves hold concrete values: IRIs, blank nodes, literals, labels, property names and values. Internal vertices are statements. Each statement vertex has exactly three outgoing edges, labeled subject, predicate and object. The subject and the object may point at another statement. The predicate may not, and no path may lead back to where it started.</p>
+  <p>The model gives no meaning to statements on its own. Meaning comes from <em>images</em>, subsets of statement graphs that encode one surface model each:</p>
+  <ul>
+    <li><strong>RDF-star image:</strong> triple statements that may point at other statements, plus membership statements <code>(t, in, g)</code> that place each triple in a named graph. Two statements with the same three targets are not allowed, which keeps RDF's set semantics.</li>
+    <li><strong>RDF image:</strong> the same, but a statement may be referenced only by membership statements.</li>
+    <li><strong>LPG image:</strong> edge statements between nodes, label statements and property statements. Label and property statements cannot be referenced by anything.</li>
+    <li><strong>OneGraph image:</strong> a mix of the RDF-star and LPG images in one graph, with duplicate statements allowed.</li>
+  </ul>
+  <p>The model formalises Amazon's OneGraph (1G) idea, which we look at in <a href="graphlava-and-neptune.html">a separate article</a>. The paper is clear that it is a logical model. It says nothing about how a store should lay statements out on disk. graphlava (working name <code>meta-core</code> in the specs) is one answer to that question, tuned for agent memory.</p>
+
+  <figure>
+    <svg viewBox="0 0 680 250" role="img" aria-label="Left: a statement vertex #42 with subject, predicate and object edges to alice, worksAt and acme, and an annotation vertex #77 whose subject is #42. Right: the same in graphlava, one stmt record for #42 and the confidence stored inline in the property record of #42.">
+      <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="13" fill="#2b1a07">
+        <rect x="0" y="0" width="330" height="250" rx="14" fill="#fff3d6" stroke="#3a2208" stroke-width="2"/>
+        <text x="16" y="24" font-weight="700">Statement graph (logical)</text>
+        <g stroke="#3a2208" stroke-width="2" fill="none">
+          <path d="M150 92 L60 160"/><path d="M150 92 L150 160"/><path d="M150 92 L250 160"/>
+          <path d="M250 60 L172 84"/><path d="M262 66 L262 84"/>
+        </g>
+        <circle cx="150" cy="92" r="20" fill="#f2b84b" stroke="#3a2208" stroke-width="2"/>
+        <text x="150" y="97" text-anchor="middle" font-weight="700">#42</text>
+        <circle cx="262" cy="48" r="18" fill="#c9852c" stroke="#3a2208" stroke-width="2"/>
+        <text x="262" y="53" text-anchor="middle" font-weight="700" fill="#fff8e8">#77</text>
+        <text x="96" y="126">s</text><text x="156" y="132">p</text><text x="206" y="126">o</text><text x="205" y="64">s</text>
+        <rect x="18" y="160" width="84" height="26" rx="6" fill="#ffffff" stroke="#3a2208"/><text x="60" y="178" text-anchor="middle">:alice</text>
+        <rect x="106" y="160" width="88" height="26" rx="6" fill="#ffffff" stroke="#3a2208"/><text x="150" y="178" text-anchor="middle">:worksAt</text>
+        <rect x="204" y="160" width="92" height="26" rx="6" fill="#ffffff" stroke="#3a2208"/><text x="250" y="178" text-anchor="middle">:acme</text>
+        <text x="234" y="100" font-size="11.5">p :confidence</text><text x="234" y="116" font-size="11.5">o 0.9</text>
+        <text x="16" y="226">a vertex plus three edges per statement</text>
+        <rect x="350" y="0" width="330" height="250" rx="14" fill="#fff3d6" stroke="#3a2208" stroke-width="2"/>
+        <text x="366" y="24" font-weight="700">graphlava (physical)</text>
+        <text x="366" y="56">stmt</text>
+        <rect x="366" y="64" width="298" height="32" rx="6" fill="#f2b84b" stroke="#3a2208"/>
+        <text x="376" y="85">#42 → (:alice, :worksAt, :acme)</text>
+        <text x="366" y="124">props of #42</text>
+        <rect x="366" y="132" width="298" height="32" rx="6" fill="#e8f3d4" stroke="#3a2208"/>
+        <text x="376" y="153">:confidence 0.9   (no ID yet)</text>
+        <text x="366" y="194">+ SPO, POS, OSP entries for #42</text>
+        <text x="366" y="226">one ID, one record, one property slot</text>
+      </g>
+    </svg>
+    <figcaption>The same two facts. On the left, each statement is a vertex. On the right, the statement is one record and the literal-valued annotation lives in its property record until something needs to point at it.</figcaption>
+  </figure>
+
+  <h2>A statement is a 64-bit ID</h2>
+  <p>In graphlava every term is one <code>u64</code>. The top bits are a kind tag: IRI, blank node, dictionary literal, statement, graph, hyperedge or inline literal. Joins, orderings and range scans work on these integers. Strings are decoded only at the final projection.</p>
+  <p>A statement is a subject, predicate and object with an ID of kind <em>statement</em>. Because that ID is an ordinary term, it can stand in subject or object position of another statement. That is the statement graph's "subject or object may point at a statement" rule, with no extra table. The predicate is always an IRI, as in the paper.</p>
+  <p>One rule goes further than the logical model. The spec says that updating the object of a statement keeps its ID (<code>dm-update-in-place</code>). The old <code>(s, p, o)</code> leaves every index and the new one appears in the same transaction. Annotations stay attached. In a pure statement graph, a statement <em>is</em> its three edges, so changing the object would make a different statement. graphlava treats the ID as the identity and the object as a value that can change. That suits agent memory, where "Alice works at Acme, confidence 0.9" becomes "Alice works at Globex" and the confidence and source should follow.</p>
+<pre><code><span class="c"># in-place update: the same reifier on both sides keeps the ID</span>
+DELETE { &lt;&lt; :alice :worksAt ?old ~ ?r &gt;&gt; }
+INSERT { &lt;&lt; :alice :worksAt :globex ~ ?r &gt;&gt; }
+WHERE  { &lt;&lt; :alice :worksAt ?old ~ ?r &gt;&gt; }</code></pre>
+  <p>The reifier <code>?r</code> in SPARQL 1.2 is the statement ID. Binding it costs nothing extra in a scan, and <code>rdf:reifies</code> is never stored. The spec recommends returning it to clients as an IRI of the form <code>urn:meta-core:stmt:{id}</code>; the exact form is still open.</p>
+  <p>A predicate can also be declared <code>functional</code> in the meta-model (ADR 0028): at most one object per subject. Then a plain <code>INSERT DATA { :alice :worksAt :globex }</code> updates the existing statement in place as well, and the planner can treat <code>(s, p)</code> as a key.</p>
+
+  <h2>Sets by default, duplicates on request</h2>
+  <p>The images disagree about duplicates. The RDF and RDF-star images forbid two statements with the same three targets. The OneGraph image allows them, because property graphs allow parallel edges. A store has to choose.</p>
+  <p>graphlava chooses per predicate (ADR 0004). By default a predicate allows at most one statement per <code>(s, p, o)</code>. Inserting an existing triple returns the existing ID and changes nothing, unless it is inserted into another graph, which adds a membership (ADR 0024). That is RDF set semantics, and it keeps the ordering keys narrow: an entry is <code>(a, b, c) → id</code>, with the ID as a value. A predicate declared <code>multi</code> in the meta-model gets keys <code>(a, b, c, id)</code> and allows parallel statements, each with its own ID. So the RDF image is the default, and the OneGraph image is available for the predicates that need it.</p>
+  <p>The cost shows in Cypher, which arrives in v1: <code>CREATE (a)-[:T]->(b)</code> on a non-multi predicate binds the existing statement instead of making a second one. The spec lists this as a deviation from Cypher.</p>
+
+  <h2>Properties without an ID, until they need one</h2>
+  <p>In the LPG image, property statements cannot be referenced. You cannot say where a property value came from. graphlava keeps the ability to reference everything, but does not pay for it up front.</p>
+  <p>A statement whose object is a literal is an <strong>inline property</strong>. It lives in its subject's property record, not in the three orderings, so an overwrite touches one tree. To queries it is an ordinary statement. It has no statement ID yet. When something annotates it, or an API asks for its ID, it is <strong>promoted</strong>: it gets an ID, it is written to <code>stmt</code> and the orderings, and its slot in the property record becomes a pointer to the ID. Promotion is one-way.</p>
+<pre><code><span class="c"># :name is an inline property; annotating it promotes it</span>
+INSERT DATA { :alice :name "Alice" {| :source :chat17 |} }</code></pre>
+  <p>The same pattern repeats across the design. Four things are virtual until annotated:</p>
+  <div class="tablewrap"><table>
+    <tr><th>Virtual item</th><th>Stored as</th><th>Gets an ID when</th></tr>
+    <tr><td>Inline property</td><td>slot in the subject's property record</td><td>it is annotated or its ID is requested</td></tr>
+    <tr><td>Hyperedge role <code>(e, :agent, n)</code></td><td>slot in the hyperedge record plus an incidence key</td><td>the role filling is annotated</td></tr>
+    <tr><td>Graph membership <code>(x, :in, g)</code></td><td>the chunk the ID came from, or a <code>gmem</code> entry</td><td>the membership is annotated (ADR 0017)</td></tr>
+    <tr><td>Derived fact</td><td>a rule's derived table</td><td>the fact is annotated</td></tr>
+  </table></div>
+  <p>Logically, all four are statements in the paper's sense: they have a subject, a predicate and an object. Physically, most of them never need an identity, so they do not get one. The statement graph is fully there for queries. The ID is materialised only where someone wants to say something about it.</p>
+
+  <h2>Deleting follows the subject edges</h2>
+  <p>A statement graph describes structure, not change. A store needs to say what a delete takes with it. graphlava's rule (ADR 0006): deleting a statement deletes, in the same transaction and transitively, every statement whose subject is its ID. An annotation has no meaning without the thing it annotates. IDs are never reused, so a stale reference can never land on a new statement.</p>
+  <p>Two escape hatches exist in SPARQL. <code>DELETE KEEP ANNOTATIONS</code> deletes only the statement and leaves its annotations reachable by their own IDs. A statement or node that fills a hyperedge role cannot be deleted silently: the delete fails unless the request says <code>DELETE DETACH</code>, which removes the whole hyperedge as well. A cascade is limited per transaction (100,000 items by default) and rolls back if it would go further.</p>
+  <div class="note"><p>Only the subject edge cascades. A statement that merely has a deleted statement as its <em>object</em>, such as <code>(:note, :about, stmt#42)</code>, is not an annotation. What happens to it is still an open question in the specs.</p></div>
+
+  <h2>Beyond the images: hyperedges</h2>
+  <p>The paper's images cover triples, RDF-star and property graphs. They have no n-ary relation. In a statement graph you model a meeting with an agent, a target and a topic as a node with three role statements. graphlava keeps that logical view but stores it differently.</p>
+  <p>A hyperedge has a type declared in the meta-model, with named roles. It is one record, keyed by its ID, holding the type and the role fillers. An <code>incidence</code> index answers "which hyperedges does this node fill, in which role". Role fillers are not written to the SPO, POS and OSP orderings, so a k-role hyperedge write touches one record and k incidence keys instead of 3k ordering entries. A literal value such as the meeting's date is not a role: it is an inline property of the hyperedge (ADR 0028), so role fillers are always nodes. Queries still see role triples and properties alike:</p>
+<pre><code>SELECT ?a ?t ?w WHERE { ?e a :Meeting ; :agent ?a ; :target ?t ; :when ?w }</code></pre>
+  <p>Those triples are produced from the record and the index, never stored. From v2 the planner is designed to turn such a star into one scan of the record. In v0 it runs as a join of virtual role relations.</p>
+
+  <h2>Graphs: membership statements without the rows</h2>
+  <p>In the RDF-star image, a membership statement <code>(t, in, g)</code> puts each triple in a graph. graphlava has the same triple, <code>(x, :in, g)</code>, but it is virtual. Every statement and hyperedge gets its ID from a <em>chunk</em> of about a million IDs leased to one graph and one kind of item. The chunk number is part of the ID, so the home graph of an item is a function of its ID: primary membership costs zero bytes per item. Membership in other graphs is one <code>gmem</code> entry.</p>
+  <p>One statement can be in several graphs (ADR 0024). Inserting a triple that already exists into a second graph adds a membership and keeps the ID. Deleting it inside one <code>GRAPH</code> removes only that membership; the statement goes when its last membership goes. Facts that differ per episode, such as who said it in that session, are annotations on the membership <code>&lt;&lt; X :in g &gt;&gt;</code>, which gets an ID when annotated.
+  <p>Graphs are nodes and can nest. Nesting is a DAG: a graph may have several parents, and an <code>:in</code> edge that would close a cycle is rejected. <code>GRAPH :g { … }</code> matches g and every graph nested under it; <code>GRAPH! :g { … }</code> matches only direct members, which is standard SPARQL. The paper's images have flat named graphs only, so nesting is another place where graphlava extends the model.</p>
+
+  <h2>What statement graphs give that graphlava does not (yet)</h2>
+  <ul>
+    <li><strong>Formal images and mappings.</strong> The paper defines exact images for RDF, RDF-star and property graphs, and mappings between them. graphlava's mapping between SPARQL and Cypher is a table in its specs, to be checked by cross-surface tests. A Lean model of the core is in progress, not a proof of the RDF and LPG mappings.</li>
+    <li><strong>Acyclicity by definition.</strong> Statement graphs forbid cycles, which keeps reasoning simple. graphlava rejects cycles in graph nesting, and an annotation can only point at a statement that already exists, but the specs do not state a general acyclicity guarantee for object-position references.</li>
+    <li><strong>Layout freedom.</strong> A logical model can be laid out any way an engine likes. graphlava commits to one: redb tables, three base orderings, chunked IDs.</li>
+    <li><strong>Maturity.</strong> The model has a published paper and an industrial lineage in Amazon Neptune. graphlava is a set of specs, decision records and a Rust workspace. No engine code runs yet, and every performance claim in its specs reads "to be measured".</li>
+  </ul>
+  <p>What graphlava adds is a set of physical decisions: one 64-bit ID per item with a kind tag, IDs that survive updates, sets by default and duplicates per predicate, identity only where it is used, deletes that follow subject edges, n-ary records, and nested graphs that cost nothing per member. The logical picture stays the statement graph.</p>
+
+  <h2>References</h2>
+  <ol class="refs">
+    <li>E. Gelling, G. Fletcher, M. Schmidt. <em>Bridging graph data models: RDF, RDF-star, and property graphs as directed acyclic graphs</em> [extended abstract]. arXiv:2304.13097, 2023.</li>
+    <li>E. Gelling, G. Fletcher, M. Schmidt. <em>Statement Graphs: Unifying the Graph Data Model Landscape</em>. DASFAA 2024, LNCS, pp. 364–376.</li>
+    <li>O. Lassila, M. Schmidt et al. <em>The OneGraph Vision: Challenges of Breaking the Graph Model Lock-In</em>. Semantic Web Journal 14(1), 2023.</li>
+    <li>graphlava specifications: data model, hyperedges, named and nested graphs, SPARQL 1.2; decision records 0004, 0005, 0006 and 0017. <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a>.</li>
+    <li>Tiramemsu. <a href="https://www.tiramemsu.com/articles/statement-graphs.html">Statement graphs and tiramemsu: one idea, one row deep</a>, 2026.</li>
+  </ol>
+
+  <div class="pager">
+    <a href="./">← All articles</a>
+    <a class="next" href="graphlava-and-tiramemsu.html">graphlava and tiramemsu →</a>
+  </div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statement graphs · graphlava mini book</title>
+<meta name="description" content="Give every statement an identifier and let that identifier stand where a node can. That one rule is enough to hold RDF, RDF-star, property graphs and the four metagraph kinds. This chapter defines it ">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Statement graphs">
+<meta property="og:description" content="Give every statement an identifier and let that identifier stand where a node can. That one rule is enough to hold RDF, RDF-star, property graphs and the four metagraph kinds. This chapter defines it ">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Chapter 4</p>
+<h1>Statement graphs</h1>
+<p class="standfirst">Give every statement an identifier and let that identifier stand where a node can. That one rule is enough to hold RDF, RDF-star, property graphs and the four metagraph kinds. This chapter defines it and shows how graphlava lays it out.</p>
+
+<h2>The unit: an identified statement</h2>
+<p>A statement is a subject, a predicate and an object, plus an identifier:</p>
+<pre><code>s1 = (:alice, :worksAt, :acme)</code></pre>
+<p>The identifier <code>s1</code> is a term. It can be the subject or the object of another statement. The predicate cannot be a statement; it is always a plain name. That asymmetry keeps queries tractable: every pattern still has a known relation in the middle.</p>
+<pre><code>s2 = (s1, :confidence, 0.9)
+s3 = (s1, :source, :chat12)</code></pre>
+<p>Compare classic RDF reification, which spends four triples to make a handle for one fact:</p>
+<pre><code>_:r rdf:type      rdf:Statement .
+_:r rdf:subject   :alice .
+_:r rdf:predicate :worksAt .
+_:r rdf:object    :acme .
+_:r :confidence   0.9 .</code></pre>
+<p>In a statement graph the handle comes with the fact.</p>
+
+<h2>The model, formally</h2>
+<p>Gelling, Fletcher and Schmidt define a statement graph as a directed acyclic graph with two kinds of vertices (arXiv:2304.13097, 2023; DASFAA 2024):</p>
+<ul>
+  <li><strong>Leaves</strong> hold values: IRIs, blank nodes, literals, property-graph labels and keys. Each value appears once.</li>
+  <li><strong>Internal vertices</strong> are statement identifiers. Each has exactly three outgoing edges, labelled <em>subject</em>, <em>predicate</em> and <em>object</em>. The subject and object may lead to another statement; the predicate may not.</li>
+</ul>
+<p>The model gives no meaning by itself. Meaning comes from <strong>images</strong>: restricted forms that encode each familiar data model.</p>
+<div class="tablewrap"><table>
+  <tr><th>Image</th><th>What is allowed</th></tr>
+  <tr><td>RDF</td><td>Triple statements plus membership statements <code>(t, in, g)</code> for named graphs. Statements are referenced only by memberships. No two statements with the same three targets.</td></tr>
+  <tr><td>RDF-star</td><td>As RDF, but a triple may have another triple as subject or object.</td></tr>
+  <tr><td>Property graph</td><td>Edge statements between nodes, label statements, and property statements on nodes or edges. Label and property statements cannot be referenced.</td></tr>
+  <tr><td>OneGraph</td><td>A mix of the RDF-star and property-graph images in one graph, with duplicate statements allowed.</td></tr>
+</table></div>
+<p>The OneGraph image comes from Amazon's 1G vision, the model behind Neptune Analytics, which runs openCypher over RDF data. The images show that one statement-centric model holds all three common graph models without loss.</p>
+
+<h2>Why the identifier is the minimum</h2>
+<p>Chapter 3 listed what a metagraph needs. Each item becomes an ordinary statement once statements have identifiers:</p>
+<div class="tablewrap"><table>
+  <tr><th>Metagraph need</th><th>As statements</th></tr>
+  <tr><td>An edge as a vertex</td><td><code>(s1, :confidence, 0.9)</code>: the subject is a statement</td></tr>
+  <tr><td>A vertex as a container</td><td><code>(s1, :in, :session7)</code>: a membership statement</td></tr>
+  <tr><td>Nesting containers</td><td><code>(:session7, :in, :aliceMemory)</code></td></tr>
+  <tr><td>A hyperedge</td><td>a node <code>e1</code> with role statements <code>(e1, :agent, :alice)</code>, …</td></tr>
+  <tr><td>A relationship between relationships</td><td><code>(e1, :ledTo, s9)</code></td></tr>
+  <tr><td>The model as data</td><td><code>(:Meeting, :hasRole, :agent)</code></td></tr>
+</table></div>
+<p>Without identifiers, every row of this table needs a different mechanism: reification triples, quads, a separate n-ary node convention, a schema file. With identifiers they are one mechanism. That is why this book uses statement graphs as the common substrate for hypergraphs and metagraphs.</p>
+<div class="note">
+<p><strong>A naming clash.</strong> tiramemsu's own docs use "statement graph" for something narrower: a named graph whose name is a statement, so an edge can hold a subgraph. In this book "statement graph" always means the Gelling, Fletcher and Schmidt model.</p>
+</div>
+
+<h2>graphlava: one ID space</h2>
+<p>In graphlava every term is one 64-bit ID. The top bits are a kind tag, so the kind of any ID is known without a lookup:</p>
+<div class="tablewrap"><table>
+  <tr><th>Tag</th><th>Kind</th><th>Subject</th><th>Predicate</th><th>Object</th></tr>
+  <tr><td><code>0x1</code></td><td>IRI</td><td>yes</td><td>yes</td><td>yes</td></tr>
+  <tr><td><code>0x2</code></td><td>blank node</td><td>yes</td><td>no</td><td>yes</td></tr>
+  <tr><td><code>0x3</code></td><td>dictionary literal</td><td>no</td><td>no</td><td>yes</td></tr>
+  <tr><td><code>0x4</code></td><td>statement</td><td>yes</td><td>no</td><td>yes</td></tr>
+  <tr><td><code>0x5</code></td><td>graph</td><td>yes</td><td>no</td><td>yes</td></tr>
+  <tr><td><code>0x6</code></td><td>hyperedge</td><td>yes</td><td>no</td><td>yes</td></tr>
+  <tr><td><code>0x8</code>–<code>0xF</code></td><td>inline literal: bit 63 set, value inside the ID (prefix <code>10</code> a double, <code>11</code> a 4-bit subtype such as integer, date or short string)</td><td>no</td><td>no</td><td>yes</td></tr>
+</table></div>
+<p>The spec's rule is the statement-graph rule: a predicate is always an IRI, a literal is never a subject, and any other kind can be a subject or an object. Statements, graphs and hyperedges are all first-class terms in one ID space, so a join never has to ask which table an ID came from.</p>
+<p>In SPARQL, a statement ID is the RDF 1.2 reifier. The spec recommends returning it to clients as an IRI, <code>&lt;urn:meta-core:stmt:{id}&gt;</code>, which maps back to the ID without a dictionary lookup (recommended; the form is still open).</p>
+
+<h3>Where graphlava differs from the paper</h3>
+<div class="tablewrap"><table>
+  <tr><th>Topic</th><th>Statement graphs</th><th>graphlava (spec)</th></tr>
+  <tr><td>Identity under change</td><td>A statement is its three targets.</td><td>Updating a statement's object keeps its ID, so annotations stay attached.</td></tr>
+  <tr><td>Duplicates</td><td>Forbidden in RDF images, allowed in OneGraph.</td><td>One statement per <code>(s, p, o)</code> by default; a predicate declared <code>multi</code> allows several, each with its own ID.</td></tr>
+  <tr><td>Hyperedges</td><td>A node plus role statements.</td><td>A native record; role statements are virtual (chapter 5).</td></tr>
+  <tr><td>Which statements have IDs</td><td>All of them.</td><td>Literal-valued properties, hyperedge roles, graph memberships and derived facts are statements to every query, but get an ID only when something annotates them (chapter 6).</td></tr>
+  <tr><td>Graph nesting</td><td>Membership statements.</td><td>Membership plus a nesting DAG with cycle checks and transitive scope (chapter 7).</td></tr>
+</table></div>
+<p>The last two rows are the important ones. Logically, everything is a statement. Physically, graphlava pays for an ID only where one is used.</p>
+
+<div class="note">
+<p><strong>In graphlava.</strong> A statement is a subject–predicate–object fact with a stable 64-bit ID. Statement, graph and hyperedge IDs are terms like IRIs, so they can stand in subject or object position. The statement ID is the SPARQL 1.2 reifier, and binding it costs no join.</p>
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>A statement graph is (s, p, o) with an identifier, where s and o may be statements and p may not.</li>
+  <li>Images show that RDF, RDF-star and property graphs are all restricted statement graphs.</li>
+  <li>An identifier per statement is the one feature every metagraph power needs.</li>
+  <li>graphlava keeps the logical model and gives IDs lazily: virtual statements are promoted when annotated.</li>
+</ul>
+
+<div class="pager">
+  <a class="prev" href="03-metagraphs.html">← Chapter 3</a>
+  <a href="index.html">Contents</a>
+  <a class="next" href="05-modeling-hyperedges.html">Chapter 5: Modeling hyperedges →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>
