@@ -1,0 +1,374 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://graphlava.org/schema/conformance-case-v1.json",
+  "title": "graphlava binding conformance case (one JSON-lines record)",
+  "description": "One line of bindings/conformance/*.jsonl. Each case runs against a fresh database file. See README.md for the semantics; ADR 0042 makes this corpus the shared binding contract.",
+  "type": "object",
+  "required": [
+    "id",
+    "kind"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.+-]*$",
+      "description": "Unique across all files."
+    },
+    "group": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "hosts": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "*",
+          "rust",
+          "python",
+          "node",
+          "swift",
+          "kotlin"
+        ]
+      },
+      "default": [
+        "*"
+      ],
+      "description": "Hosts that run the case. '*' means every host. The Rust runner validates every case and executes those whose hosts include '*' or 'rust'."
+    },
+    "kind": {
+      "enum": [
+        "roundtrip",
+        "reject",
+        "query",
+        "ops"
+      ]
+    },
+    "value": {
+      "$ref": "#/$defs/value"
+    },
+    "expect": {
+      "description": "roundtrip: a value (term and/or native) the read-back must equal; defaults to 'value'. query: {vars, rows, ordered} | {boolean} | {count}."
+    },
+    "inline": {
+      "type": "boolean",
+      "description": "roundtrip: whether the stored object ID is an inline literal (bit 63 set)."
+    },
+    "reopen": {
+      "type": "boolean",
+      "default": false,
+      "description": "Close and reopen the file before reading back."
+    },
+    "error": {
+      "$ref": "#/$defs/error"
+    },
+    "setup": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/op"
+      }
+    },
+    "lang": {
+      "enum": [
+        "sparql",
+        "datalog"
+      ]
+    },
+    "text": {
+      "type": "string"
+    },
+    "ops": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/op"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "roundtrip"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "value"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "reject"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "value",
+          "error"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "query"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "lang",
+          "text",
+          "expect"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "ops"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "ops"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "term": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "iri"
+          ],
+          "properties": {
+            "iri": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "bnode"
+          ],
+          "properties": {
+            "bnode": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "literal"
+          ],
+          "properties": {
+            "literal": {
+              "type": "string"
+            },
+            "datatype": {
+              "type": "string",
+              "description": "Defaults to xsd:string, or rdf:langString when lang is set."
+            },
+            "lang": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "triple"
+          ],
+          "properties": {
+            "triple": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "$ref": "#/$defs/term"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "ref"
+          ],
+          "properties": {
+            "ref": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "description": "An ID bound earlier in the case with 'as'."
+        }
+      ]
+    },
+    "native": {
+      "type": "object",
+      "required": [
+        "type",
+        "value"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Host value to construct. Known types: int (decimal string, any size), float (decimal, 'NaN', 'INF', '-INF', '-0.0'), bool, str, decimal (lexical string, scale kept), datetime (aware ISO 8601 with offset), naive_datetime (ISO 8601 without offset), date (YYYY-MM-DD). Hosts skip a native type they do not know and use the term instead; bindings may add host-specific types (e.g. node: safe_number, date_ms)."
+        },
+        "value": {}
+      }
+    },
+    "value": {
+      "type": "object",
+      "properties": {
+        "term": {
+          "$ref": "#/$defs/term"
+        },
+        "native": {
+          "$ref": "#/$defs/native"
+        }
+      },
+      "minProperties": 1
+    },
+    "error": {
+      "enum": [
+        "Io",
+        "Corrupted",
+        "Full",
+        "FormatMismatch",
+        "Locked",
+        "Conflict",
+        "NotFound",
+        "ReferencedByStatement",
+        "FillsRole",
+        "GraphCycle",
+        "GraphDepthExceeded",
+        "HyperedgeShapeMismatch",
+        "CascadeLimitExceeded",
+        "WriteTimeout",
+        "ReadOnly",
+        "Invalid"
+      ],
+      "description": "A Rust Error variant name. Python maps it to <Name>Error, Node to an error code, Swift/Kotlin to their enum case."
+    },
+    "op": {
+      "type": "object",
+      "required": [
+        "op"
+      ],
+      "properties": {
+        "op": {
+          "enum": [
+            "insert",
+            "set",
+            "update",
+            "annotate",
+            "delete",
+            "remove",
+            "statement_id",
+            "insert_unasserted",
+            "declare_predicate",
+            "create_graph",
+            "add_member",
+            "remove_member",
+            "nest",
+            "unnest",
+            "drop_graph",
+            "declare_hedge_type",
+            "create_hedge",
+            "update_role",
+            "reopen"
+          ]
+        },
+        "s": {
+          "$ref": "#/$defs/term"
+        },
+        "p": {
+          "$ref": "#/$defs/term"
+        },
+        "o": {
+          "$ref": "#/$defs/term"
+        },
+        "id": {
+          "type": "string",
+          "description": "Name bound earlier with 'as'."
+        },
+        "expected": {
+          "$ref": "#/$defs/term"
+        },
+        "mode": {
+          "enum": [
+            "cascade",
+            "keep_annotations",
+            "detach"
+          ]
+        },
+        "graph": {
+          "$ref": "#/$defs/term"
+        },
+        "child": {
+          "$ref": "#/$defs/term"
+        },
+        "parent": {
+          "$ref": "#/$defs/term"
+        },
+        "recursive": {
+          "type": "boolean"
+        },
+        "multi": {
+          "type": "boolean"
+        },
+        "functional": {
+          "type": "boolean"
+        },
+        "type": {
+          "$ref": "#/$defs/term"
+        },
+        "roles": {
+          "type": "array",
+          "description": "declare_hedge_type: [{role, many?, required?}]; create_hedge: [[role, filler], ...]"
+        },
+        "attrs": {
+          "type": "array"
+        },
+        "role": {
+          "$ref": "#/$defs/term"
+        },
+        "filler": {
+          "$ref": "#/$defs/term"
+        },
+        "as": {
+          "type": "string",
+          "description": "Bind the operation's resulting ID to this name."
+        },
+        "error": {
+          "$ref": "#/$defs/error",
+          "description": "The operation must fail with this error; the case then continues."
+        },
+        "result": {
+          "description": "Expected result of the operation: an ID name check is not possible across hosts, so this is a boolean (changed/removed) or an integer count of deleted IDs."
+        }
+      }
+    }
+  }
+}

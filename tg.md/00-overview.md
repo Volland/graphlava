@@ -3,9 +3,9 @@ type: Concept
 status: draft
 specs: ["adr:0002", "adr:0003", "adr:0004", "adr:0005", "adr:0009", "adr:0013", "adr:0014", "adr:0015", "adr:0018", "adr:0025", "adr:0026", "adr:0027", "adr:0030"]
 ---
-# meta-core overview
+# graphlava overview
 
-meta-core is an embedded, mutable, current-state-only metagraph database in Rust, tuned for agent memory: many small transactions, value overwrites, point lookups and short traversals.
+graphlava is an embedded, mutable, current-state-only metagraph database in Rust, tuned for agent memory: many small transactions, value overwrites, point lookups and short traversals.
 
 - defines:: [[01-data-model]]
 - defines:: [[02-id-encoding]]
@@ -15,7 +15,7 @@ meta-core is an embedded, mutable, current-state-only metagraph database in Rust
 
 ## Purpose
 
-This file is the entry point to the specifications: what meta-core is for, what it is not, how its layers fit, and where each layer is specified. The working name `meta-core` is not final ([[open-questions#Project name]]).
+This file is the entry point to the specifications: what graphlava is for, what it is not, how its layers fit, and where each layer is specified. The project is named graphlava ([[adr:0031]]); older records use its working name, `meta-core`.
 
 The glossary lives in `CONTEXT.md` at the repository root. Terms in **bold** below (Statement, Graph, Hyperedge, Inline property, Promotion, Chunk, Scope, Derived fact, Owner process, Durability level, Multi predicate, Functional predicate, Owned literal, Batch, Write request, Partitioned graph) have the meaning given there and nowhere else.
 
@@ -39,7 +39,7 @@ These are out of scope on purpose. A feature request that needs one of them belo
 
 <non-goal>
 
-Time travel, audit history and bitemporality. That is the job of the sibling project tiramemsu; meta-core shares no log format with it.
+Time travel, audit history and bitemporality. That is the job of the sibling project tiramemsu; graphlava shares no log format with it.
 
 </non-goal>
 
@@ -63,7 +63,7 @@ Full-text search in the core. It may come as an extension.
 
 ## Architecture
 
-meta-core is a stack of layers in one process. Each layer only calls the layer below; the IR is the single meeting point of all query surfaces, and the `Storage` trait is the only place that knows the engine.
+graphlava is a stack of layers in one process. Each layer only calls the layer below; the IR is the single meeting point of all query surfaces, and the `Storage` trait is the only place that knows the engine.
 
 ```mermaid
 flowchart TB
@@ -73,7 +73,7 @@ flowchart TB
     CYPHER["Cypher/GQL subset (v1)"]
     API["Rust API + core API / C FFI / Swift+Kotlin (16-api)"]
   end
-  SERVER["meta-core-server: SPARQL Protocol + Datalog endpoint (v1)"]
+  SERVER["graphlava-server: SPARQL Protocol + Datalog endpoint (v1)"]
   IR["Extended-Datalog IR (10-ir)"]
   PLAN["Planner + plan cache + statistics (14)"]
   EXEC["Vectorized executor: index nested-loop, merge/hash, Leapfrog Triejoin, BFS paths (14)"]

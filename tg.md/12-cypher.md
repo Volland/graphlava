@@ -48,12 +48,12 @@ The clauses and features in the v1 subset, and what is explicitly out. Anything 
 
 ## Mapping
 
-How the property-graph model of Cypher maps onto meta-core's statements, inline properties and hyperedges. The mapping is fixed so that Cypher and SPARQL see the same data.
+How the property-graph model of Cypher maps onto graphlava's statements, inline properties and hyperedges. The mapping is fixed so that Cypher and SPARQL see the same data.
 
 - depends_on:: [[01-data-model#Statements]] {strength: hard}
 - depends_on:: [[01-data-model#Inline properties]] {strength: hard}
 
-| Cypher | meta-core | Notes |
+| Cypher | graphlava | Notes |
 | --- | --- | --- |
 | node | any non-literal term (IRI, blank node, statement, graph, hyperedge) | `id(n)` returns the u64 ID |
 | relationship `-[r:T]->` | statement `(a, T, b)` with ID `r` | `T` is a predicate IRI |

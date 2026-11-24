@@ -1,0 +1,194 @@
+name: Mobile bindings
+
+# Change v1-mobile-bindings ([[16-api#Mobile bindings]]): the C FFI fuzzing,
+# the Swift package (XCFramework, macOS host, iOS simulator), the Kotlin
+# package (JVM host, AAR with the 16 KB gate, emulators), and the nightly
+# device runner. Kept apart from ci.yml so the binding jobs evolve on their own.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "crates/graphlava/**"
+      - "crates/graphlava-ffi/**"
+      - "bindings/swift/**"
+      - "bindings/kotlin/**"
+      - ".github/workflows/mobile.yml"
+  schedule:
+    - cron: "17 2 * * *" # nightly: 1 h fuzzing and the device runner
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ffi-fuzz-smoke:
+    name: FFI fuzz (5 min)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-fuzz --locked
+      - working-directory: crates/graphlava-ffi
+        run: |
+          cargo fuzz run journal_frames -- -max_total_time=60
+          cargo fuzz run ffi_calls -- -max_total_time=240 -timeout=30
+
+  ffi-fuzz-nightly:
+    name: FFI fuzz (1 h, nightly)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-fuzz --locked
+      # Scenario "Random call sequences": 1 hour, no crash, leak or UB report.
+      - working-directory: crates/graphlava-ffi
+        run: |
+          cargo fuzz run ffi_calls -- -max_total_time=3600 -timeout=30
+          cargo fuzz run journal_frames -- -max_total_time=600
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: crates/graphlava-ffi/fuzz/artifacts/
+
+  swift:
+    name: Swift (macOS host + iOS simulator)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios,aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: install elan (oracle traces for the Swift replay)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - run: lake build
+        working-directory: formal
+      - name: XCFramework (5 slices, module map, privacy manifest)
+        run: bindings/swift/build-xcframework.sh
+      - name: swift test (macOS host, oracle seeds 1..8)
+        working-directory: bindings/swift
+        env:
+          GRAPHLAVA_REQUIRE_REFINEMENT: "1"
+        run: swift test
+      - name: iOS simulator
+        working-directory: bindings/swift
+        run: |
+          dev=$(xcrun simctl list devices available | grep -m1 -E 'iPhone' | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          xcodebuild test -scheme GraphLava -destination "platform=iOS Simulator,id=$dev"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GraphLavaFFI.xcframework
+          path: bindings/swift/GraphLavaFFI.xcframework
+
+  kotlin:
+    name: Kotlin (JVM host + AAR + 16 KB gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: install elan (oracle traces for the Kotlin replay)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - run: lake build
+        working-directory: formal
+      - name: gradle check and the AAR
+        working-directory: bindings/kotlin
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+          GRAPHLAVA_REQUIRE_REFINEMENT: "1"
+        run: ./gradlew check :graphlava-android:assembleRelease
+      - name: 16 KB alignment of the AAR's libraries
+        working-directory: bindings/kotlin
+        run: |
+          mkdir -p build/aar
+          unzip -o graphlava-android/build/outputs/aar/graphlava-android-release.aar 'jni/*' -d build/aar
+          READELF="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" \
+            scripts/check-16k-alignment.sh build/aar/jni/*/libgraphlava.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: graphlava-android-aar
+          path: bindings/kotlin/graphlava-android/build/outputs/aar/
+
+  android-emulator:
+    name: Android emulator (${{ matrix.name }})
+    needs: kotlin
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86_64 API 34
+            api: 34
+            arch: x86_64
+            target: google_apis
+          # Scenario "16 KB page alignment": a 16 KB-page Android 15 image.
+          - name: 16 KB pages API 35
+            api: 35
+            arch: x86_64
+            target: google_apis_ps16k
+    steps:
+      - uses: actions/checkout@v4
+      - name: enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        with:
+          api-level: ${{ matrix.api }}
+          arch: ${{ matrix.arch }}
+          target: ${{ matrix.target }}
+          working-directory: bindings/kotlin
+          # On failure, print the per-test results and the app's log so the
+          # cause shows in the job log, not only in the HTML report.
+          script: |
+            adb shell getconf PAGE_SIZE
+            adb logcat -c
+            ./gradlew :graphlava-android:connectedAndroidTest || { find graphlava-android/build/outputs/androidTest-results -name '*.xml' -exec cat {} + ; adb logcat -d -s AndroidRuntime:E TestRunner:* graphlava:* '*:F' | tail -200 ; exit 1 ; }
+
+  # Device runs need the reference iPhone and Android phone on a self-hosted
+  # runner labelled `graphlava-devices` (tasks 3.8 and 5.2): the background-
+  # during-group-commit and kill-during-journal-apply crash tests with the
+  # 0xdead10cc crash-log check, `am kill` / `kill -9` after background, and the
+  # Mobile benchmark (suspend p99 < 500 ms at 10M statements).
+  devices-nightly:
+    name: Device runner (nightly)
+    if: github.event_name == 'schedule' && vars.GRAPHLAVA_DEVICE_RUNNER == 'true'
+    runs-on: [self-hosted, graphlava-devices]
+    steps:
+      - uses: actions/checkout@v4
+      - name: device harness
+        run: |
+          echo "::error::the device harness (tasks 3.8, 5.2 of v1-mobile-bindings) is not implemented yet"
+          exit 1

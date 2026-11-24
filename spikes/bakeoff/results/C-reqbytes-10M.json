@@ -1,0 +1,55 @@
+{
+  "base": "data/crash/base-10M.redb",
+  "env": {
+    "build": "cargo --release, lto=fat, codegen-units=1, debug=1 (symbols only)",
+    "cache_state": "warm (OS page cache not dropped; `purge` needs root)",
+    "cores": "12",
+    "cpu": "Apple M2 Max",
+    "dataset": "gen-v1 (src/data.rs)",
+    "fs": "/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse, protect, root data)",
+    "graphlava_commit": "d1bf69f (+ uncommitted working tree)",
+    "kernel": "27.2.0",
+    "os": "macOS 27.2.1 (26B131)",
+    "ram_bytes": "68719476736",
+    "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "seed": 42,
+    "timestamp": "2026-11-24T16:39:21Z"
+  },
+  "experiment": "bytes written per one-statement request (ADR 0025)",
+  "loaded_stmts": 10000000,
+  "result": [
+    {
+      "disk_bytes_per_request": 303120.384,
+      "disk_bytes_written": 606240768,
+      "durable_every_txns": 1,
+      "mode": "txn_per_request_immediate",
+      "requests": 2000,
+      "requests_per_s": 162.5932540102974,
+      "requests_per_txn": 1,
+      "statements_per_request": 1,
+      "wall_s": 12.300633333
+    },
+    {
+      "disk_bytes_per_request": 110239.744,
+      "disk_bytes_written": 220479488,
+      "durable_every_txns": 1,
+      "mode": "batch_100_immediate",
+      "requests": 2000,
+      "requests_per_s": 950.8502722543199,
+      "requests_per_txn": 100,
+      "statements_per_request": 1,
+      "wall_s": 2.103380583
+    },
+    {
+      "disk_bytes_per_request": 310927.36,
+      "disk_bytes_written": 621854720,
+      "durable_every_txns": 100,
+      "mode": "txn_per_request_none_immediate_every_100",
+      "requests": 2000,
+      "requests_per_s": 681.3667762514872,
+      "requests_per_txn": 1,
+      "statements_per_request": 1,
+      "wall_s": 2.935276667
+    }
+  ]
+}

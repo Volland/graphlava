@@ -2,14 +2,16 @@
 type: Scenario
 status: draft
 specs: ["adr:0019"]
+lat:
+  require-code-mention: true
 ---
 # End-to-end tests
 
-The catalogue of end-to-end scenarios: each runs through public entry points on a real database file and checks what a user of meta-core would observe, including across process restarts and crashes.
+The catalogue of end-to-end scenarios: each runs through public entry points on a real database file and checks what a user of graphlava would observe, including across process restarts and crashes.
 
 - cites:: [[19-verification#Test pyramid]] {intent: usesMethodIn}
 
-Rules for every scenario here: the test creates its file in a fresh temporary directory, uses only `Database`, `sparql()`, `datalog()` or the C FFI, never internal tables, and closes and reopens the file before its final assertion. Tests live in `crates/meta-core/tests/e2e/` and carry `@tg: verifies:: [[21-e2e-tests#<Scenario>]] {level: e2e}`. Once code exists, set `lat: require-code-mention: true` in this file so `tg check` reports any scenario without a test.
+Rules for every scenario here: the test creates its file in a fresh temporary directory, uses only `Database`, `sparql()`, `datalog()` or the C FFI, never internal tables, and closes and reopens the file before its final assertion. Tests live in `crates/graphlava/tests/e2e/` and carry `@tg: verifies:: [[21-e2e-tests#<Scenario>]] {level: e2e}`. This file sets `lat: require-code-mention: true`, so `tg check` reports any scenario without a test.
 
 ## Agent memory session
 
@@ -218,7 +220,7 @@ A C program linked against the FFI library opens, writes, queries and closes, wi
 
 <given>
 
-A C test program built in CI against `libmeta_core_ffi`.
+A C test program built in CI against `libgraphlava_ffi`.
 
 </given>
 
@@ -231,6 +233,129 @@ It runs the agent-memory session scenario through the FFI under AddressSanitizer
 <then>
 
 Results equal the Rust scenario; the sanitizers report nothing; every error code is the documented one.
+
+</then>
+
+## Python agent memory session
+
+The agent memory session run from Python through the `graphlava` package, so the binding is checked on a real file across a reopen.
+
+- refines:: [[16-api#Python binding]]
+
+<given>
+
+An empty `memory.glv` in a temp dir, opened with `graphlava.Database.open` from a Python test (`crates/graphlava-py/tests/test_api_parity.py`).
+
+</given>
+
+<when>
+
+Insert `(:alice, :knows, :bob)` with `Durability.ORDERED`, annotate the statement with `:confidence 0.9`, commit, close and reopen, and run `SELECT ?c WHERE { << :alice :knows :bob >> :confidence ?c }`.
+
+</when>
+
+<then>
+
+One row with the Python `float` `0.9`; the statement ID is a non-negative `int` below `2**64` and equals the one `insert` returned before the reopen. The same test runs in the wheel smoke test of every target.
+
+</then>
+
+## Node agent memory session
+
+The agent memory session run from Node.js through the `@graphlava/node` package, so the binding is checked on a real file across a reopen.
+
+- refines:: [[16-api#Node.js binding]]
+
+<given>
+
+An empty `memory.glv` in a temp dir, opened with `Database.open(file, { prefixes: { '': 'http://ex.org/' } })` from a `node:test` test (`bindings/node/test/api-parity.test.mjs`).
+
+</given>
+
+<when>
+
+`await db.submit([{op: "insert", s: ":alice", p: ":knows", o: iri(":bob")}], "ordered")`, annotate the returned statement with `:confidence 0.9`, close and reopen, and run the reifier query for `:confidence`.
+
+</when>
+
+<then>
+
+One row with the `number` `0.9`; the reifier's ID column holds the `bigint` that `submit` returned before the reopen. The same session runs in the install smoke test of every target and Node version (`bindings/node/test-support/smoke.mjs`).
+
+</then>
+
+## iOS suspend during a group commit
+
+An app with its database in an app-group container goes to the background while a group-commit batch is open; suspend must flush and release the lock so the system never kills it for `0xdead10cc`.
+
+- refines:: [[16-api#^api-ios-suspend]]
+- refines:: [[06-transactions-durability#^tx-durability-prefix]]
+
+<given>
+
+An app whose database is in an app-group container issues 50 `ordered` commits through the Swift package; the batch is open.
+
+</given>
+
+<when>
+
+The app is sent to the background (the lifecycle observer calls `graphlava_suspend` inside `beginBackgroundTask`) and then terminated by the system; a read issued while suspended waits for resume.
+
+</when>
+
+<then>
+
+No `0xdead10cc` crash report exists; after relaunch every commit acknowledged before backgrounding is present; the waiting read returns correct rows from a fresh snapshot. Host and simulator: `bindings/swift/Tests/GraphLavaTests/SuspendTests.swift`, `crates/graphlava-ffi/tests/mobile.rs`; device: the nightly device runner.
+
+</then>
+
+## Android kill after background
+
+Android kills background processes without warning; every `sync` or `ordered` commit acknowledged before must survive, flushed on `ON_STOP`.
+
+- refines:: [[06-transactions-durability#^tx-durability-prefix]]
+- refines:: [[16-api#^api-kotlin-threads]]
+
+<given>
+
+A test app on an arm64-v8a emulator with the AAR and `GraphLavaLifecycle` installed has made 100 `ORDERED` commits and one acknowledged `RELAXED` commit.
+
+</given>
+
+<when>
+
+It goes to the background (`ON_STOP` flushes) and is killed with `am kill`, then `kill -9`.
+
+</when>
+
+<then>
+
+After relaunch all 100 ordered commits are present, the relaxed transaction is fully present or fully absent, and the file opens without a recovery error. JVM host: `bindings/kotlin/graphlava/src/test/kotlin/org/graphlava/KillSafetyTest.kt` (SIGKILL of a child JVM); emulator: CI.
+
+</then>
+
+## Extension journal applied once
+
+A share extension writes while the app is closed; the app applies the journal on its next open, exactly once, even if it is killed midway, and drops a torn tail.
+
+- refines:: [[16-api#^api-ios-extension-ipc]]
+- refines:: [[06-transactions-durability#^tx-atomic]]
+
+<given>
+
+A share extension has appended 3 write requests to `<appgroup>/graphlava/share.journal` through `ExtensionClient` while the app was not running; in a second run the last frame is torn.
+
+</given>
+
+<when>
+
+The app opens the database and applies the journal; in a third run the owner is killed right after the second frame commits and then reopens.
+
+</when>
+
+<then>
+
+The requests apply in order and the journal is empty; a relaunch applies nothing again; a torn last frame is dropped with one warning and the earlier frames apply; after the kill exactly the third frame applies. Tests: `crates/graphlava-ffi/tests/mobile.rs`, `bindings/swift/Tests/GraphLavaTests/ExtensionTests.swift`.
 
 </then>
 

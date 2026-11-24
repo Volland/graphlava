@@ -6,12 +6,12 @@ specs: ["adr:0002", "adr:0005", "adr:0009", "adr:0011", "adr:0012", "adr:0015", 
 ---
 # Benchmarks
 
-The measurements that must run before meta-core's performance claims are trusted: the engine bake-off that gates v0, layout comparisons, competitor baselines, Datalog, vectors and mobile.
+The measurements that must run before graphlava's performance claims are trusted: the engine bake-off that gates v0, layout comparisons, competitor baselines, Datalog, vectors and mobile.
 
 - cites:: [[pre-design]] {intent: usesDataFrom}
 - cites:: [[19-verification#CI gates]] {intent: usesMethodIn}
 
-Every benchmark section names its workload, its metrics and its pass line. A pass line with no known number says "to be measured"; the first run sets the baseline and a later decision sets the target. All runs record hardware, OS, file system, build flags and the meta-core commit.
+Every benchmark section names its workload, its metrics and its pass line. A pass line with no known number says "to be measured"; the first run sets the baseline and a later decision sets the target. All runs record hardware, OS, file system, build flags and the graphlava commit.
 
 Common setup: release build with LTO; the database file on local NVMe on desktop; caches dropped between cold runs; each latency metric reported as p50, p99 and p99.9 over at least 10^5 operations after warm-up.
 
@@ -80,9 +80,9 @@ To be measured. The decision in [[adr:0015]] holds if the three-ordering layout 
 
 ## Versus tiramemsu
 
-Same dataset and workload on meta-core and tiramemsu, at 1, 10 and 100 versions per fact.
+Same dataset and workload on graphlava and tiramemsu, at 1, 10 and 100 versions per fact.
 
-Expectation from the handover: close at 1 version, meta-core ahead as history grows. If meta-core is not ahead at 10 and 100 versions, the bottleneck is the query layer, not storage.
+Expectation from the handover: close at 1 version, graphlava ahead as history grows. If graphlava is not ahead at 10 and 100 versions, the bottleneck is the query layer, not storage.
 
 <metric>
 
@@ -108,7 +108,7 @@ Latency p50/p99 of the agent-memory mix; write throughput at each durability lev
 
 <target>
 
-To be measured. Proposal: meta-core at least 3x lower p99 on point lookups and overwrites than SQLite, in line with the 3–6x KV gap the handover cites from redb's README.
+To be measured. Proposal: graphlava at least 3x lower p99 on point lookups and overwrites than SQLite, in line with the 3–6x KV gap the handover cites from redb's README.
 
 </target>
 
@@ -118,7 +118,7 @@ Materialization speed against Nemo on standard rule sets.
 
 - cites:: [[13-datalog#On-demand evaluation]] {intent: usesMethodIn}
 
-Rule sets: transitive closure over chains, trees and random graphs (10^5–10^7 edges); RDFS on LUBM-style data. meta-core runs `@on_demand` in v0 and `@materialized` in v1.
+Rule sets: transitive closure over chains, trees and random graphs (10^5–10^7 edges); RDFS on LUBM-style data. graphlava runs `@on_demand` in v0 and `@materialized` in v1.
 
 <metric>
 
@@ -141,13 +141,42 @@ A subset of the agent-memory mix on one iOS and one Android device, at 1M and 10
 
 <metric>
 
-Latency p50/p99; file size; energy per 10^4 operations where the OS exposes it; time to suspend and resume.
+Latency p50/p99 in µs per operation through each binding (Swift, Kotlin), `ordered` durability, dataset seed 42; file size; energy per 10^4 operations where the OS exposes it; time to suspend and to resume in ms, p50 and p99 over 100 backgroundings with a full open batch. Results are stored as baseline JSON with the device model and OS version. Suspend of an app-group file costs the batch flush plus redb's close, which writes its allocator state with one more flush; a private-container suspend costs the flush only.
 
 </metric>
 
 <target>
 
-Suspend completes in under 1 s so the app is never killed for a held lock (iOS gives a few seconds; the exact budget is to be measured). Other targets to be measured.
+Gate: suspend p99 below 500 ms at 10M statements on each reference device; the run fails at 500 ms or more ([[openspec:mobile-bindings#Mobile latency]]). Every other metric is to be measured.
+
+</target>
+
+## Binding overhead
+
+The time a host-language binding adds to each call above the same Rust call, for Python first and then Node.js and mobile ([[adr:0042]]).
+
+- cites:: [[16-api#Python binding]] {intent: usesMethodIn}
+- cites:: [[16-api#Node.js binding]] {intent: usesMethodIn}
+- cites:: [[17-benchmarks#Durability commit latency]] {intent: usesMethodIn}
+
+Workloads, each run through the binding and through Rust on the same file:
+
+- a `props()` point lookup on a random node;
+- an `out()` 2-hop traversal;
+- a 1-statement `ordered` submit;
+- a 10,000-row `SELECT`, read row by row and in 1024-row batches (`iter_batches()` in Python).
+
+Dataset: `py-agent-v1`, seed 42, 1M statements (4 per node: two `knows` edges, `age`, `name`), the same file for both sides. The Python driver is `crates/graphlava-py/bench/overhead.py`; it runs the Rust side, `cargo run --release -p graphlava-py --example overhead_baseline` (`crates/graphlava-py/bench/rust_baseline.rs`), on the same file and reports the difference. The `sync`, `ordered` and `relaxed` 1-statement commits of [[17-benchmarks#Durability commit latency]] run through both sides too, and their delta is recorded. `bench/scripts/nightly.sh` runs it on the fixed runner.
+
+<metric>
+
+Overhead in µs per call above the Rust call: p50, p99 and p99.9, recorded as HDR histograms; for the batch workload, overhead per row for the row path and the batch path side by side.
+
+</metric>
+
+<target>
+
+To be measured: the first run on the fixed Linux x86_64 nightly runner sets the baseline (`bench/results/binding-overhead-python.baseline.json`); after that the nightly job fails if p50 exceeds the baseline by more than 20% at 95% confidence.
 
 </target>
 
@@ -215,11 +244,11 @@ How every benchmark here is run, so that two numbers from different days or mach
 
 - cites:: [[19-verification#CI gates]] {intent: usesMethodIn}
 
-Layout: micro benchmarks in `crates/<crate>/benches/` (criterion for wall-clock, `iai-callgrind` for instruction counts); the macro harness in `bench/` as a binary `meta-bench` with a dataset generator, workload drivers and adapters for meta-core, SQLite, Oxigraph and tiramemsu behind one trait. Results are JSON files in `bench/results/<date>-<commit>-<host>.json` holding raw HDR histograms, not just summaries.
+Layout: micro benchmarks in `crates/<crate>/benches/` (criterion for wall-clock, `iai-callgrind` for instruction counts); the macro harness in `bench/` as a binary `meta-bench` with a dataset generator, workload drivers and adapters for graphlava, SQLite, Oxigraph and tiramemsu behind one trait. Results are JSON files in `bench/results/<date>-<commit>-<host>.json` holding raw HDR histograms, not just summaries.
 
 <metric>
 
-Per run: hardware (CPU model, cores, RAM), OS and kernel, file system and mount options, storage device, Rust version and flags, dataset generator version and seed, meta-core commit, durability level, cache state (cold or warm).
+Per run: hardware (CPU model, cores, RAM), OS and kernel, file system and mount options, storage device, Rust version and flags, dataset generator version and seed, graphlava commit, durability level, cache state (cold or warm).
 
 </metric>
 
@@ -252,7 +281,7 @@ No case may use more than 3% more instructions than on `main`; a larger rise nee
 
 ## Standard SPARQL workloads
 
-Established RDF benchmarks, so meta-core can be compared with published numbers and with Oxigraph, the closest embedded Rust RDF store.
+Established RDF benchmarks, so graphlava can be compared with published numbers and with Oxigraph, the closest embedded Rust RDF store.
 
 - cites:: [[11-sparql#Conformance]] {intent: usesMethodIn}
 

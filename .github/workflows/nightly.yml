@@ -1,0 +1,43 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    name: Soak against the model (30 min)
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # [[21-e2e-tests#Soak against the model]]: about 10^6 statements,
+      # readers on 4 threads, a sweep and a reopen every 5 minutes.
+      - run: cargo test -p graphlava --release --locked --test soak -- --nocapture
+        env:
+          GRAPHLAVA_SOAK_SECS: "1800"
+          GRAPHLAVA_SOAK_SUBJECTS: "250000"
+          GRAPHLAVA_SOAK_REOPEN_SECS: "300"
+
+  # [[17-benchmarks#Harness and method]]: wall-clock benchmarks need a fixed,
+  # dedicated machine. The job runs only once a self-hosted runner with the
+  # `graphlava-bench` label exists and the repository variable
+  # GRAPHLAVA_BENCH_RUNNER is set to "true".
+  bench:
+    name: Nightly benchmarks (fixed runner)
+    if: vars.GRAPHLAVA_BENCH_RUNNER == 'true'
+    runs-on: [self-hosted, graphlava-bench]
+    timeout-minutes: 600
+    steps:
+      - uses: actions/checkout@v4
+      - run: bench/scripts/nightly.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: bench/results/*.json

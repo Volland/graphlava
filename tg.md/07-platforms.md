@@ -5,7 +5,7 @@ specs: ["adr:0002", "adr:0012", "adr:0018"]
 ---
 # Platform constraints
 
-Rules the five target platforms impose on meta-core that nobody here chose: file locking, app suspension, page sizes, sync calls and file growth, and what each binds in the design.
+Rules the five target platforms impose on graphlava that nobody here chose: file locking, app suspension, page sizes, sync calls and file growth, and what each binds in the design.
 
 - constrains:: [[06-transactions-durability#Durability levels]] {strength: must}
 - constrains:: [[05-storage-trait#redb adapter]] {strength: must}
@@ -29,8 +29,11 @@ Apple terminates a suspended app that holds a file lock on a file in a shared ap
 
 - constrains:: [[06-transactions-durability#Group commit]] {strength: must}
 - constrains:: [[16-api#Mobile bindings]] {strength: must}
+- constrains:: [[openspec:mobile-bindings#iOS suspend and resume]] {strength: must}
+- constrains:: [[openspec:mobile-bindings#iOS extension writes]] {strength: must}
+- constrains:: [[23-binding-decisions#Suspend is a core operation]] {strength: must}
 
-The owner process must, on the "will resign active" or background notification, close the open batch with a flush, finish or abort the running write transaction, and close the database (releasing redb's file lock) when the file is in an app-group container. On return to foreground it reopens the file and re-pins readers.
+The owner process must, on the "will resign active" or background notification, close the open batch with a flush, finish or abort the running write transaction, and release redb's file lock (drop the engine handle, keeping the database handle) when the file is in an app-group container. On return to foreground it reopens the engine handle; readers re-pin lazily ([[16-api#Mobile bindings]]).
 
 App extensions (share, widget, intents) are separate processes. They must not open the file; they reach the owner app through XPC or a shared request queue that the app drains, per [[adr:0002]].
 
@@ -49,10 +52,12 @@ Background execution time on iOS is short (a few seconds after backgrounding, pe
 Android devices ship with 4 KB or 16 KB memory pages, and from 2025 Google Play requires native libraries to support 16 KB pages. Apps run in one process by default and may be killed in the background without warning.
 
 - constrains:: [[16-api#Mobile bindings]] {strength: must}
+- constrains:: [[openspec:mobile-bindings#Android background and kill safety]] {strength: must}
+- constrains:: [[openspec:mobile-bindings#Mobile native packaging]] {strength: must}
 
 Native libraries are built with the NDK and linked with 16 KB-aligned ELF segments. redb is pure Rust, so no C toolchain is needed beyond the NDK linker.
 
-A kill without warning is a crash for meta-core; durability follows [[06-transactions-durability#Crash recovery]]. Apps that need writes to survive a background kill use `sync` or `ordered`, not `relaxed`.
+A kill without warning is a crash for graphlava; durability follows [[06-transactions-durability#Crash recovery]]. Apps that need writes to survive a background kill use `sync` or `ordered`, not `relaxed`.
 
 Whether redb's page size can be set to 16 KB, and whether it matters for performance on 16 KB devices, is to be measured.
 
@@ -84,5 +89,4 @@ Linux is the reference platform for crash and power-loss testing, because fault-
 
 Questions these constraints leave open; each is an `OpenQuestion` in [[open-questions]].
 
-- [[open-questions#Page size on 16 KB devices]]
 - [[open-questions#Large drops on mobile]]

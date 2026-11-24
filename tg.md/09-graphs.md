@@ -172,7 +172,7 @@ Adding `(a, :in, b)` fails with `GraphDepthExceeded` when the resulting longest 
 
 Path counts are avoided because they grow exponentially in a DAG: about 32 stacked diamonds overflow a `u32`, well within the depth limit.
 
-`in_star` is a built-in materialized rule, maintained inside the writer transaction. In v0 user rules are on demand only ([[adr:0013]]); whether built-in rules are exempt is [[open-questions#Built-in materialized rules in v0]].
+`in_star` is a built-in materialized rule, maintained inside the writer transaction. In v0 user rules are on demand only ([[adr:0013]]); built-in rules such as `in_star` are exempt and materialized in v0 ([[adr:0037]]).
 
 ## Partitioned graphs
 
@@ -255,6 +255,5 @@ Property and conformance tests for membership and scope.
 
 Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
 
-- [[open-questions#Built-in materialized rules in v0]]
 - [[open-questions#Partitioned graph per file]]
 - [[open-questions#Large drops on mobile]]

@@ -7,7 +7,7 @@ specs: ["adr:0011", "adr:0021", "adr:0023", "adr:0010", "adr:0006", "adr:0018"]
 ---
 # ID encoding
 
-The 64-bit ID that names every term in meta-core: kind tag, chunked and sequential allocation, inline literals with value-preserving order, canonical forms, and how IDs are allocated.
+The 64-bit ID that names every term in graphlava: kind tag, chunked and sequential allocation, inline literals with value-preserving order, canonical forms, and how IDs are allocated.
 
 - follows_from:: [[adr:0011]]
 - follows_from:: [[adr:0021]]
@@ -77,7 +77,7 @@ An inline literal ID therefore sorts by value within its run, and a range filter
 | `11`, `0x2` | `xsd:boolean` | bit 0 | `false < true` |
 | `11`, `0x3` | `xsd:dateTime`, `xsd:dateTimeStamp` | UTC microseconds since 1970-01-01, signed 57 bits, then a has-timezone bit | add 2^56 to the instant, then append the bit |
 | `11`, `0x4` | `xsd:date` | days since 1970-01-01 of the written date, signed 57 bits, then a has-timezone bit | add 2^56, then append the bit |
-| `11`, `0x5` | `xsd:string` of 0..7 UTF-8 bytes | 7 bytes, zero padded on the right, in payload bits 57..2 | lexicographic |
+| `11`, `0x5` | `xsd:string` of 0..7 UTF-8 bytes, last byte not `0x00` | 7 bytes, zero padded on the right, in payload bits 57..2 | lexicographic |
 | `11`, `0x6` | `rdf:langString` of 0..5 bytes | 5 bytes then a 16-bit language ID, in payload bits 57..2 | lexicographic, then language |
 | `11`, `0x7`..`0xF` | reserved | | |
 
@@ -89,13 +89,13 @@ The numeric runs are adjacent in key order: inline doubles (class `10`), then in
 
 <rule id="id-inline-range" strength="must">
 
-Every integer in [-2^57, 2^57 - 1], every decimal and double in its inline range, every date and dateTime in range (years about -313 to 4253), every string of at most 7 bytes and every `xsd:boolean` is stored inline, never in the dictionary. A value outside the inline range is a dictionary literal and keeps its exact lexical form and datatype.
+Every integer in [-2^57, 2^57 - 1], every decimal and double in its inline range, every date and dateTime in range (years about -313 to 4253), every string of at most 7 bytes that does not end with a `0x00` byte, and every `xsd:boolean`, is stored inline, never in the dictionary. A value outside the inline range is a dictionary literal and keeps its exact lexical form and datatype.
 
 </rule>
 
 <rule id="id-double-inline" strength="must">
 
-An `xsd:double` is stored inline, exactly, when it is ±0, ±infinity, or a normal value whose unbiased exponent is in [-255, 254] (magnitudes from about 10^-77 to 10^77). Its magnitude field is the exponent plus 256 in 9 bits (0 for zero, 511 for infinity) followed by all 52 mantissa bits. NaN, subnormals and doubles outside the range are dictionary literals; range filters on them are served by the value index ([[adr:0022]]), never by an ordering scan.
+An `xsd:double` is stored inline, exactly, when it is ±0, ±infinity, or a normal value whose unbiased exponent is in [-255, 254] (magnitudes from about 1.7 × 10^-77 to 5.8 × 10^76). Its magnitude field is the exponent plus 256 in 9 bits (0 for zero, 511 for infinity) followed by all 52 mantissa bits. NaN, subnormals and doubles outside the range are dictionary literals; range filters on them are served by the value index ([[adr:0022]]), never by an ordering scan.
 
 </rule>
 
@@ -196,6 +196,5 @@ Property, corpus and crash tests that prove the encoding round-trips, preserves 
 
 ## Open items
 
-Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
+No questions remain open; the ones this spec raised are answered in [[resolved-questions]].
 
-- [[open-questions#Language tag table]]: the size and growth policy of the 16-bit language ID table.

@@ -16,7 +16,7 @@ Statements carry statements, hyperedges are stored once, and graphs nest inside 
 
 <p align="center"><a href="https://github.com/Volland/graphlava/actions/workflows/ci.yml"><img src="https://github.com/Volland/graphlava/actions/workflows/ci.yml/badge.svg" alt="CI"></a></p>
 
-> **Status: design.** The specifications, 30 decision records, a Lean 4 model of the store, and the Rust workspace with CI for Linux, macOS, Windows, iOS and Android exist. The engine does not exist yet: there is nothing to install today. In the specs the project is still called by its working name, `meta-core`.
+> **Status: v0 in progress, pre-release.** The store core, named and nested graphs, hyperedges, SPARQL 1.2 and Datalog are implemented and tested against a Lean 4 model, the W3C SPARQL suites and a crash harness; a C FFI exists, and Python, Node.js, Swift and Kotlin bindings are being built. The file format is not frozen yet and nothing is published to install yet. Start with the [core crate's README](crates/graphlava/README.md).
 
 ## Why
 
@@ -59,11 +59,16 @@ The site's source is in [site/](site/).
 | [tg.md/19-verification.md](tg.md/19-verification.md) | assurance strategy: Lean proofs, refinement replay, E2E, crash tests, benchmark gates |
 | [formal/](formal/) | Lean 4 model of the store with machine-checked invariants and the trace oracle |
 | [tg.md/open-questions.md](tg.md/open-questions.md) | design questions still open, with options and recommendations |
-| [docs/adr/](docs/adr/) | architecture decision records 0002–0030 |
+| [docs/adr/](docs/adr/) | architecture decision records 0002–0042 |
 | [openspec/config.yaml](openspec/config.yaml) | project context and per-artifact rules every OpenSpec proposal, spec, design and task list must follow |
-| [openspec/changes/v0-core/](openspec/changes/v0-core/) | the v0 change: proposal, capability specs with scenarios, design, tasks |
-| [crates/meta-core/](crates/meta-core/) | the embeddable core crate (placeholder) |
-| [crates/meta-core-ffi/](crates/meta-core-ffi/) | C FFI, built as `libmeta_core_ffi` for desktop, iOS and Android |
+| [openspec/specs/](openspec/specs/) | the capability specs of finished work, with scenarios and their Lean theorems |
+| [openspec/changes/](openspec/changes/) | changes in progress (hardening and freeze, the redb 4.x upgrade, the v1 bindings) and the [archive](openspec/changes/archive/) of finished ones |
+| [crates/graphlava/](crates/graphlava/) | the embeddable core crate: store, graphs, hyperedges, SPARQL 1.2, Datalog ([README](crates/graphlava/README.md)) |
+| [crates/graphlava-ffi/](crates/graphlava-ffi/) | C FFI, built as `libgraphlava_ffi` for desktop, iOS and Android |
+| [crates/graphlava-py/](crates/graphlava-py/) | Python binding (PyO3), published on PyPI as `graphlava` |
+| [crates/graphlava-node/](crates/graphlava-node/), [bindings/node/](bindings/node/) | Node.js binding (napi-rs), published on npm as `@graphlava/node` |
+| [bindings/swift/](bindings/swift/), [bindings/kotlin/](bindings/kotlin/) | Swift package and Android AAR over the C FFI |
+| [bindings/conformance/](bindings/conformance/) | the language-neutral conformance corpus every binding runs |
 | [.github/workflows/](.github/workflows/) | CI (Linux, macOS, Windows, iOS, Android, MSRV, cargo-deny, `tg` checks) and tag-driven releases |
 | [CONTEXT.md](CONTEXT.md) | glossary of domain terms |
 | [site/](site/) | source of [graphlava.org](https://graphlava.org): website, articles and the mini book |
@@ -81,7 +86,16 @@ cargo clippy --workspace --all-targets -- -D warnings
 (cd formal && lake build && ./scripts/lean-audit.sh)   # Lean 4 proofs
 ```
 
-Rust 1.85+ (edition 2024). Pushing a `v*` tag builds `libmeta_core_ffi` for every desktop and iOS target and attaches the archives to a GitHub release.
+Rust 1.87+ (edition 2024). Pushing a `v*` tag builds `libgraphlava_ffi` for every desktop and iOS target and attaches the archives to a GitHub release.
+
+## Benchmarks
+
+Macro benchmarks live in [bench/](bench/), a separate Cargo workspace (excluded from the root one, so the MSRV and root CI never build it) with the `meta-bench` binary: the agent-memory mix, LUBM, WatDiv, BSBM, an SNB-style traversal workload and the graphlava-specific benchmarks of [tg.md/17-benchmarks.md](tg.md/17-benchmarks.md), with adapters for graphlava, SQLite, Oxigraph and (feature `tiramemsu`) tiramemsu. Results are JSON files with raw HDR histograms in `bench/results/`. How to run them: [bench/README.md](bench/README.md).
+
+```sh
+cd bench && cargo build --release
+./target/release/meta-bench mix --adapters graphlava,sqlite,oxigraph --statements 100000
+```
 
 ## License
 

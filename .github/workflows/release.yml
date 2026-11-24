@@ -30,15 +30,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - run: cargo build -p meta-core-ffi --release --locked --target ${{ matrix.target }}
+      - run: cargo build -p graphlava-ffi --release --locked --target ${{ matrix.target }}
       - name: package
         shell: bash
         run: |
           dir=target/${{ matrix.target }}/release
-          out=meta-core-${{ github.ref_name }}-${{ matrix.target }}
+          out=graphlava-${{ github.ref_name }}-${{ matrix.target }}
           mkdir "$out"
           cp LICENSE-MIT LICENSE-APACHE README.md "$out"/
-          for f in libmeta_core_ffi.a libmeta_core_ffi.so libmeta_core_ffi.dylib meta_core_ffi.dll meta_core_ffi.dll.lib meta_core_ffi.lib; do
+          for f in libgraphlava_ffi.a libgraphlava_ffi.so libgraphlava_ffi.dylib graphlava_ffi.dll graphlava_ffi.dll.lib graphlava_ffi.lib; do
             [ -f "$dir/$f" ] && cp "$dir/$f" "$out"/ || true
           done
           tar czf "$out.tar.gz" "$out"

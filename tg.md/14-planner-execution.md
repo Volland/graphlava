@@ -282,7 +282,5 @@ Tests for plans and execution, run against a reference evaluator that uses neste
 
 ## Open items
 
-Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
+No questions remain open; the ones this spec raised are answered in [[resolved-questions]].
 
-- [[open-questions#Missing ordering for cyclic patterns]]: whether a cyclic query that needs a missing ordering waits for, triggers, or never triggers a synchronous build.
-- [[open-questions#Statistics drift threshold]]: the drift factor that invalidates cached plans and triggers a statistics rebuild.

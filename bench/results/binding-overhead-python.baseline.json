@@ -1,0 +1,6 @@
+{
+  "benchmark": "Binding overhead",
+  "binding": "python",
+  "status": "pending: the first nightly run on the fixed Linux x86_64 runner sets this baseline (tg.md/17-benchmarks.md#Binding overhead)",
+  "props_overhead_p50_us_median": null
+}

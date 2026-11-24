@@ -7,7 +7,7 @@ specs: ["adr:0004", "adr:0005", "adr:0006", "adr:0007", "adr:0008", "adr:0009", 
 ---
 # Data model
 
-The logical model of meta-core: terms, statements with stable IDs, inline properties and their promotion, annotations, and how the four metagraph kinds and the meta-model map onto it.
+The logical model of graphlava: terms, statements with stable IDs, inline properties and their promotion, annotations, and how the four metagraph kinds and the meta-model map onto it.
 
 - follows_from:: [[adr:0004]]
 - follows_from:: [[adr:0005]]
@@ -197,14 +197,15 @@ The subject of an annotation can be a stored statement, a promoted inline proper
 
 ### Reifiers in RDF 1.2
 
-In SPARQL the statement ID is the reifier ([[11-sparql#Reifiers]]). RDF 1.2 allows things this model does not represent directly; they are open:
+In SPARQL the statement ID is the reifier ([[11-sparql#Reifiers]]). RDF 1.2 allows two things this model maps onto statement IDs ([[adr:0032]]):
 
-- several distinct reifiers for the same triple ([[open-questions#Multiple reifiers per triple]]);
-- a reifier for a triple that is not asserted ([[open-questions#Unasserted triple terms]]).
+- several distinct reifiers for the same triple: the first is the statement ID and further reifier IRIs are aliases of it;
+- a reifier for a triple that is not asserted: a statement with an `unasserted` flag in `stmt`, skipped by ordinary pattern matching and seen by reifier lookups.
+- a triple term `<<( s p o )>>` used as an object: the ID of the statement for that triple, unasserted when the triple is not asserted ([[22-implementation-decisions#Triple terms map to statement IDs]]).
 
 ## Metagraph kinds
 
-meta-core supports four kinds of metagraph structure. Each maps onto statements and IDs, with a dedicated physical structure where the generic mapping would be too slow.
+graphlava supports four kinds of metagraph structure. Each maps onto statements and IDs, with a dedicated physical structure where the generic mapping would be too slow.
 
 | Kind | Logical form | Physical form | Spec |
 | --- | --- | --- | --- |
@@ -231,7 +232,7 @@ The meta-model is the schema of a database stored as statements in the system gr
 
 <rule id="dm-system-graph" strength="must">
 
-The system graph has the fixed graph ID of [[02-id-encoding#Allocation]] and holds all meta-model statements. Its IRIs use a reserved namespace ([[open-questions#System namespace IRI]]).
+The system graph has the fixed graph ID of [[02-id-encoding#Allocation]] and holds all meta-model statements. Its IRIs use the namespace `https://graphlava.org/ns#` ([[adr:0031]]).
 
 </rule>
 
@@ -275,7 +276,4 @@ The model is tested through the Rust API, independent of any query surface, so e
 
 Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
 
-- [[open-questions#Multiple reifiers per triple]]
-- [[open-questions#Unasserted triple terms]]
-- [[open-questions#System namespace IRI]]
 - [[open-questions#Value index drop policy]]

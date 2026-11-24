@@ -1,0 +1,79 @@
+# Python wheels for the `graphlava` package (crates/graphlava-py, ADR 0042):
+# abi3 (CPython >= 3.10) and free-threaded 3.14t wheels for 5 targets, each
+# installed into a clean virtualenv and smoke-tested with the agent memory
+# session (tests/smoke.py). Publishing to PyPI is a separate, manual step.
+# @tg: implements:: [[openspec:python-binding#Python packaging]]
+name: python-wheels
+
+on:
+  push:
+    branches: [main]
+    paths: ["crates/graphlava/**", "crates/graphlava-py/**", "bindings/conformance/**", ".github/workflows/python-wheels.yml"]
+  pull_request:
+    paths: ["crates/graphlava/**", "crates/graphlava-py/**", "bindings/conformance/**", ".github/workflows/python-wheels.yml"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: pytest (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.14", "3.14t"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build and test
+        working-directory: crates/graphlava-py
+        env:
+          PYTHON_GIL: ${{ endsWith(matrix.python, 't') && '0' || '' }}
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install maturin pytest hypothesis packaging tomli
+          if [[ "${{ matrix.python }}" != *t ]]; then .venv/bin/pip install pyarrow mypy; fi
+          VIRTUAL_ENV=$PWD/.venv .venv/bin/maturin develop --release
+          .venv/bin/python -m pytest -q
+          if [[ "${{ matrix.python }}" != *t ]]; then .venv/bin/mypy --strict examples; fi
+
+  wheels:
+    name: wheels (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x86_64, os: ubuntu-latest, arch: x86_64 }
+          - { target: linux-aarch64, os: ubuntu-24.04-arm, arch: aarch64 }
+          - { target: macos-arm64, os: macos-latest, arch: arm64 }
+          - { target: macos-x86_64, os: macos-15-intel, arch: x86_64 }
+          - { target: windows-x86_64, os: windows-latest, arch: AMD64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: pypa/cibuildwheel@v3.1.4
+        with:
+          package-dir: crates/graphlava-py
+          output-dir: wheelhouse
+        env:
+          CIBW_ARCHS: ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.target }}
+          path: wheelhouse/*.whl
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --manifest-path crates/graphlava-py/Cargo.toml --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
