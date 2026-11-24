@@ -35,7 +35,7 @@
   <p>In August 2024 Neptune Analytics added openCypher queries over RDF data. The Neptune team's ISWC 2024 paper, <em>openCypher over RDF: Connecting Two Worlds</em>, describes how RDF and property-graph data are both loaded into OneGraph's internal model as <em>relationship statements</em> and <em>property statements</em>, and names statement graphs as directly inspired by OneGraph. How Neptune lays these out in memory or on disk is not public, and this article does not guess.</p>
 
   <h2>The same unit</h2>
-  <p>graphlava (working name <code>meta-core</code> in its specs) starts from the same unit. A statement is a subject, predicate and object with a stable 64-bit ID, and that ID can be the subject of another statement. Its Cypher mapping, planned for v1, lines up with the 1G vocabulary almost term for term:</p>
+  <p>graphlava starts from the same unit. A statement is a subject, predicate and object with a stable 64-bit ID, and that ID can be the subject of another statement. Its Cypher mapping, planned for v1, lines up with the 1G vocabulary almost term for term:</p>
   <div class="tablewrap"><table>
     <tr><th>Property-graph concept</th><th>OneGraph and Statement Graphs (as published)</th><th>graphlava (as specified)</th></tr>
     <tr><td>Node</td><td>a resource that statements are about</td><td>any non-literal term: IRI, blank node, statement, graph or hyperedge; <code>id(n)</code> is its 64-bit ID</td></tr>
@@ -51,7 +51,7 @@
   <p>graphlava's answer is that everything is an ID first. IRIs are interned in a dictionary and become IDs; statements, graphs and hyperedges are allocated IDs. Names are a projection. Two rules connect the two worlds:</p>
   <ul>
     <li>A Cypher relationship variable binds the statement ID, and <code>id(r)</code> returns it. That same value is the SPARQL 1.2 reifier of the statement.</li>
-    <li>The spec recommends returning reifiers to SPARQL clients as IRIs of the form <code>urn:meta-core:stmt:{id}</code>; the exact form is still open. A client can send that IRI back in a later query, and the parser maps it to the ID without a dictionary lookup.</li>
+    <li>Reifiers are returned to SPARQL clients as IRIs of the form <code>https://graphlava.org/ns/stmt/{id}</code>, with the ID in decimal (ADR 0031). A client can send that IRI back in a later query, and the parser maps it to the ID without a dictionary lookup.</li>
   </ul>
 <pre><code><span class="c"># SPARQL: the reifier ?r is the statement ID</span>
 SELECT ?who ?c WHERE {

@@ -37,7 +37,7 @@
 <p>The price is validation. A write to the schema can make existing data invalid, so schema writes get checked harder than data writes.</p>
 
 <h2>The system graph</h2>
-<p>graphlava's spec puts every meta-model statement in the <strong>system graph</strong>, a graph with a fixed ID that is created with the file, next to the default graph. Its IRIs use a reserved namespace; the recommended choice is a URN namespace such as <code>urn:meta-core:</code> (renamed with the project), and the decision is still open.</p>
+<p>graphlava's spec puts every meta-model statement in the <strong>system graph</strong>, a graph with a fixed ID that is created with the file, next to the default graph. Its IRIs use the reserved namespace <code>https://graphlava.org/ns#</code>, prefix <code>meta:</code> (ADR 0031).</p>
 <p>Three parts of the engine read it:</p>
 <div class="tablewrap"><table>
   <tr><th>Meta-model entry</th><th>Declares</th><th>Read by</th></tr>

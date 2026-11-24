@@ -86,7 +86,7 @@ _:r :confidence   0.9 .</code></pre>
   <tr><td><code>0x8</code>–<code>0xF</code></td><td>inline literal: bit 63 set, value inside the ID (prefix <code>10</code> a double, <code>11</code> a 4-bit subtype such as integer, date or short string)</td><td>no</td><td>no</td><td>yes</td></tr>
 </table></div>
 <p>The spec's rule is the statement-graph rule: a predicate is always an IRI, a literal is never a subject, and any other kind can be a subject or an object. Statements, graphs and hyperedges are all first-class terms in one ID space, so a join never has to ask which table an ID came from.</p>
-<p>In SPARQL, a statement ID is the RDF 1.2 reifier. The spec recommends returning it to clients as an IRI, <code>&lt;urn:meta-core:stmt:{id}&gt;</code>, which maps back to the ID without a dictionary lookup (recommended; the form is still open).</p>
+<p>In SPARQL, a statement ID is the RDF 1.2 reifier. Clients see it as an IRI, <code>&lt;https://graphlava.org/ns/stmt/{id}&gt;</code> with the ID in decimal, which maps back to the ID without a dictionary lookup (ADR 0031).</p>
 
 <h3>Where graphlava differs from the paper</h3>
 <div class="tablewrap"><table>

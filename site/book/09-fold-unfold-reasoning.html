@@ -109,7 +109,7 @@ SELECT ?who WHERE {
 
 <h2>Derived facts are statements, lazily</h2>
 <p>A derived fact, such as <code>colleague(:alice, :bob)</code>, is visible as a statement but is not stored in the base orderings. Materialized results live in a separate derived table. Like the other virtual statements, a derived fact gets a statement ID only when something annotates it (ADR 0009). The agent can then say how it uses the conclusion, "Bob is a colleague, and I told Carol so", without derived data ever mixing with what was written directly.</p>
-<p>Base facts can also be asserted from a program; the recommended marker is <code>@assert</code>, and the exact syntax is still open.</p>
+<p>Base facts can also be asserted from a program: <code>@assert</code> marks heads that write base data, and <code>?- goal .</code> is shorthand for <code>@output</code> (ADR 0040).</p>
 
 <div class="note">
 <p><strong>In graphlava.</strong> Hyperedges, graphs and scopes are folds that come with their unfold. Graph-level folding is a nesting write that copies nothing. Datalog reads statements with IDs, properties, roles, membership and scope as relations. Rules run on demand by default; materialized rules (v1) are limited to stable predicates and run under a budget.</p>
