@@ -1,0 +1,33 @@
+[package]
+name = "graphlava-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Command-line tool for graphlava: query, update, import, export and inspect metagraph databases"
+readme = "README.md"
+homepage = "https://graphlava.org"
+documentation = "https://docs.rs/graphlava-cli"
+keywords = ["graph-database", "sparql", "datalog", "rdf", "cli"]
+categories = ["command-line-utilities", "database"]
+include = ["src/**/*.rs", "Cargo.toml", "README.md"]
+
+[[bin]]
+name = "graphlava"
+path = "src/main.rs"
+
+[dependencies]
+graphlava = { version = "0.1.0-alpha.1", path = "../graphlava" }
+clap = { version = "4.5", features = ["derive", "wrap_help"] }
+oxrdf = { version = "0.3.5", features = ["rdf-12"] }
+oxttl = { version = "0.2.5", features = ["rdf-12"] }
+rustyline = { version = "17", default-features = false, features = ["with-file-history"] }
+
+[dev-dependencies]
+# Only to damage a test file for `graphlava check`; pinned like the core.
+redb = "=2.6.4"
+tempfile = "3.27.0"
+
+[lints]
+workspace = true
