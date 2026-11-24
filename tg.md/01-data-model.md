@@ -3,7 +3,7 @@ type: Requirement
 openspec: [statement-store]
 status: draft
 priority: must
-specs: ["adr:0004", "adr:0005", "adr:0006", "adr:0007", "adr:0008", "adr:0009", "adr:0010", "adr:0011", "adr:0017"]
+specs: ["adr:0004", "adr:0005", "adr:0006", "adr:0007", "adr:0008", "adr:0009", "adr:0010", "adr:0011", "adr:0017", "adr:0022", "adr:0024", "adr:0026", "adr:0028"]
 ---
 # Data model
 
@@ -12,6 +12,8 @@ The logical model of meta-core: terms, statements with stable IDs, inline proper
 - follows_from:: [[adr:0004]]
 - follows_from:: [[adr:0005]]
 - follows_from:: [[adr:0017]]
+- follows_from:: [[adr:0024]]
+- follows_from:: [[adr:0028]]
 - depends_on:: [[02-id-encoding#Bit layout]] {strength: hard}
 
 ## Purpose
@@ -55,13 +57,19 @@ A **Statement** is a subject–predicate–object fact with a 64-bit statement I
 
 <rule id="dm-unique-spo" strength="must">
 
-For a predicate that is not a **Multi predicate**, at most one statement exists per `(s, p, o)`. Inserting an existing `(s, p, o)` returns the existing statement ID and changes nothing.
+For a predicate that is not a **Multi predicate**, at most one statement exists per `(s, p, o)` in one store: the global tables, or the tables of one **Partitioned graph** ([[09-graphs#Partitioned graphs]]). Inserting an existing `(s, p, o)` returns the existing statement ID, adds a membership of the target graph if it is not already one ([[09-graphs#Membership operations]]), and changes nothing else.
 
 </rule>
 
 <rule id="dm-multi-predicate" strength="must">
 
 A predicate declared `multi` in the meta-model allows several statements with the same `(s, p, o)`, each with its own ID. Changing a predicate between multi and non-multi is a schema migration that rewrites its entries ([[04-physical-layout#Tables]]).
+
+</rule>
+
+<rule id="dm-functional" strength="must">
+
+A predicate declared `functional` in the meta-model allows at most one object per subject ([[adr:0028]]). `insert` or `set` of `(s, p, o')` when `(s, p, o)` exists updates that statement's object in place, keeping its ID and annotations, instead of adding or replacing a statement. `functional` and `multi` are exclusive. The planner treats `(s, p)` of a functional predicate as a key.
 
 </rule>
 
@@ -101,17 +109,17 @@ A statement ID is never reused after deletion ([[02-id-encoding#Allocation]]).
 
 ### Operations
 
-The data model offers five write operations; every surface lowers to them. Costs are counted in B-tree operations on the base tables of [[04-physical-layout#Tables]].
+The data model offers five write operations; every surface and the core API ([[16-api#Core API]]) lowers to them. Costs are counted in B-tree operations on the base tables of [[04-physical-layout#Tables]].
 
 | Operation | Effect | Base-table writes (node-valued object) | Base-table writes (literal object) |
 | --- | --- | --- | --- |
 | `insert(s,p,o)` | add a statement, return its ID | 3 orderings + `stmt` = 4 | 1 (`props`) |
-| `set(s,p,o)` | replace all values of `(s,p)` with `o` | delete old + insert new | 1 (`props`) |
-| `update(id,o)` | change the object of statement `id` | 3 deletes + 3 inserts + `stmt` = 7 | promoted: same as node-valued |
+| `set(s,p,o)` | replace all values of `(s,p)` with `o` | delete old + insert new; on a `functional` predicate, as `update` | 1 (`props`) |
+| `update(id,o[,expected])` | change the object of statement `id`; with `expected`, only if the current object equals it, else `Conflict` | 3 deletes + 3 inserts + `stmt` = 7 | promoted: same as node-valued |
 | `delete(id)` | remove a statement and cascade | 4 per statement in the cascade | 1 |
 | `annotate(id,p,o)` | insert `(id,p,o)`; promotes `id` first if needed | as `insert` | as `insert` |
 
-Each count adds on-demand orderings and value indexes that exist for the predicate. Costs in time are to be measured ([[17-benchmarks#Engine bake-off]]).
+Each count adds on-demand orderings and value indexes that exist for the predicate; the first literal value of a predicate on a node also writes one `plist` entry ([[04-physical-layout#Tables#Base tables]]). Costs in time are to be measured ([[17-benchmarks#Engine bake-off]]).
 
 ## Inline properties
 
@@ -229,8 +237,8 @@ The system graph has the fixed graph ID of [[02-id-encoding#Allocation]] and hol
 
 | Meta-model entry | Declares | Read by |
 | --- | --- | --- |
-| predicate declaration | `multi` flag, value index, on-demand orderings, datatype | write path, planner |
-| hyperedge type | arity, role names, role ranges, fixed width | write path, planner |
+| predicate declaration | `multi` or `functional` flag, value index, on-demand orderings, datatype | write path, planner |
+| hyperedge type | arity, role names, role ranges, fixed width; literal attributes are inline properties of the hyperedge ([[08-hyperedges#Literal attributes]]) | write path, planner |
 | class and label | class IRIs used as Cypher labels | Cypher front end (v1) |
 | shape | constraints checked at commit (optional) | write path |
 | rule | Datalog rule text, `@materialized` or `@on_demand` | rule engine |
@@ -238,7 +246,7 @@ The system graph has the fixed graph ID of [[02-id-encoding#Allocation]] and hol
 
 <rule id="dm-metamodel-validate" strength="must">
 
-A write to the system graph is validated before commit: a predicate cannot become `multi` while a hyperedge type or rule depends on it being single, a hyperedge type's arity cannot shrink while records of that type exist, and a rule that fails stratification is rejected.
+A write to the system graph is validated before commit: a predicate cannot become `multi` while a hyperedge type or rule depends on it being single, a predicate cannot become `functional` while any subject has two objects for it, a hyperedge type's arity cannot shrink while records of that type exist, and a rule that fails stratification is rejected.
 
 </rule>
 
@@ -258,7 +266,9 @@ The model is tested through the Rust API, independent of any query surface, so e
 
 - Property tests: random sequences of the five operations against a naive in-memory model, compared after each transaction.
 - Promotion tests: annotate, update, delete and re-annotate inline properties, hyperedge roles and memberships; IDs stay stable.
-- Uniqueness tests: duplicate inserts on single and multi predicates; update into an existing `(s,p,o)` fails.
+- Uniqueness tests: duplicate inserts on single and multi predicates; update into an existing `(s,p,o)` fails; a duplicate insert into a second graph adds a membership and keeps the ID.
+- Functional tests: `set` on a functional predicate keeps the statement ID and its annotations; declaring `functional` over a subject with two objects is rejected.
+- Compare-and-set: `update(id, o, expected)` with a stale `expected` fails with `Conflict` and changes nothing.
 - Meta-model tests: every validation rule in `dm-metamodel-validate` has a rejecting case.
 
 ## Open items

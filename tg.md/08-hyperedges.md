@@ -3,7 +3,7 @@ type: Requirement
 openspec: [hyperedges]
 status: draft
 priority: must
-specs: ["adr:0005", "adr:0006", "adr:0010", "adr:0015"]
+specs: ["adr:0005", "adr:0006", "adr:0010", "adr:0015", "adr:0024", "adr:0028"]
 ---
 # Hyperedges
 
@@ -11,12 +11,13 @@ N-ary relations stored as one record plus an incidence index, exposed to queries
 
 - follows_from:: [[adr:0010]]
 - follows_from:: [[adr:0006]]
+- follows_from:: [[adr:0028]]
 - depends_on:: [[01-data-model#Metagraph kinds]] {strength: hard}
 - depends_on:: [[02-id-encoding#Allocation]] {strength: hard}
 
 ## Purpose
 
-A meeting with an agent, a target and a time is one fact with three roles. Storing it as three statements costs three times three orderings; a hyperedge stores it once and indexes each role filler.
+A meeting with an agent, a target and a time is one fact: two roles filled by nodes and a time attribute. Storing it as three statements costs three times three orderings; a hyperedge stores it once and indexes each role filler.
 
 ## Hyperedge types
 
@@ -137,6 +138,16 @@ A promoted role edge stays served from `hedge` and `incidence`; its statement ID
 
 </rule>
 
+## Literal attributes
+
+Role fillers are always nodes. A literal value of a hyperedge, such as a meeting's time, is an inline property of the hyperedge node `e`, stored in `props[e]` ([[adr:0028]]).
+
+<rule id="he-literal-attribute" strength="must">
+
+A hyperedge type may declare literal attributes next to its roles. Each is written and read as an inline property of `e` ([[01-data-model#Inline properties]]), never as a role and never in `incidence`. A query sees it as the triple `(e, attr, value)`. Finding hyperedges by an attribute value uses a value index on that predicate.
+
+</rule>
+
 ## Star-pattern collapse
 
 From v2 the planner rewrites a star of role patterns on one variable into one scan of `hedge_T`. In v0 the same pattern runs as a join of virtual role relations.
@@ -153,7 +164,7 @@ From v2 the planner rewrites a star of role patterns on one variable into one sc
 
 <output>
 
-One range scan of `hedge` over the `:Meeting` chunks producing `(e, a, t, w)` rows; no join. With `?a` bound, one `incidence` prefix scan on `(a, :agent, :Meeting)` and one `hedge` point read per result.
+One range scan of `hedge` over the `:Meeting` chunks producing `(e, a, t)` rows and one `props[e]` read per row for the `:when` attribute; no join. With `?a` bound, one `incidence` prefix scan on `(a, :agent, :Meeting)` and one `hedge` point read per result.
 
 </output>
 
@@ -201,5 +212,4 @@ Property tests and benchmarks for the record and index invariants.
 
 Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
 
-- [[open-questions#Hyperedge role fillers that are literals]]
-- [[open-questions#Moving an item to another graph]]
+- None at present; literal fillers are resolved by [[adr:0028]] and moves by [[adr:0024]].

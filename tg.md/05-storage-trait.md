@@ -181,6 +181,8 @@ Some handover assumptions do not hold on redb. Each is handled above the trait o
 | multi-process access | single process only | owner process, [[adr:0002]] |
 | native value compression | none | v2 blocks in the value layer, [[04-physical-layout#Encoding v2]] |
 | O(1) database clone | none | not offered; Sanakirja remains a deferred option in [[adr:0002]] |
+| savepoint inside a transaction that has already written | not available, as far as known (verified in the spike) | per-request overlays inside one batch transaction ([[06-transactions-durability#Group commit]], [[adr:0025]]) |
+| fast reopen after an unclean shutdown | repair walks the file; time grows with size (to be measured) | [[open-questions#Crash repair time on large files]] |
 
 ### Spike adapters
 

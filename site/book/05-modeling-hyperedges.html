@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modeling hyperedges · graphlava mini book</title>
+<meta name="description" content="The meeting e1 has three roles and a date. This chapter stores it three ways: as role statements in a plain statement graph, as a graphlava hyperedge record, and as tiramemsu does it. Then it says when to pick wh">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Modeling hyperedges">
+<meta property="og:description" content="The meeting e1 has three roles and a date. This chapter stores it three ways: as role statements in a plain statement graph, as a graphlava hyperedge record, and as tiramemsu does it. Then it says when to pick wh">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Chapter 5</p>
+<h1>Modeling hyperedges</h1>
+<p class="standfirst">The meeting <code>e1</code> has three roles and a date. This chapter stores it three ways: as role statements in a plain statement graph, as a graphlava hyperedge record, and as tiramemsu does it. Then it says when to pick which.</p>
+
+<p>The hyperedge, as a role-labelled set (chapter 2):</p>
+<pre><code>e1 : Meeting = { agent: :alice, target: :bob, topic: :pricing }   when = 2026-11-20</code></pre>
+
+<h2>A. Role statements in a statement graph</h2>
+<p>The portable encoding is the star expansion: a node for the meeting and one statement per role.</p>
+<pre><code>:e1 a       :Meeting .
+:e1 :agent  :alice .
+:e1 :target :bob .
+:e1 :topic  :pricing .
+:e1 :when   "2026-11-20"^^xsd:date .</code></pre>
+<p>This works in any RDF store and in graphlava too. Every role statement has its own ID, so each one can be annotated at once. The costs:</p>
+<ul>
+  <li><strong>Write cost.</strong> In graphlava each node-valued statement is written to three orderings (SPO, POS, OSP) and the <code>stmt</code> table: 4 base-table writes. A literal-valued one is an inline property: 1 write. The meeting above costs 4 × 4 + 1 = 17 writes.</li>
+  <li><strong>Read cost.</strong> "All meetings with their roles" is a star join of five patterns on <code>?e</code>.</li>
+  <li><strong>No shape.</strong> Nothing stops a meeting with two agents or none, unless a shape checks it.</li>
+</ul>
+
+<h2>B. graphlava's hyperedge record</h2>
+<p>graphlava's spec stores a hyperedge as one record plus an index entry per role filler. The roles are still visible to queries as statements, but they are not stored as statements.</p>
+
+<h3>Declare the type</h3>
+<p>Every hyperedge has a type, declared in the meta-model with an ordered list of roles. Each role has an IRI, a cardinality (<code>one</code> or <code>many</code>) and an optional node kind. When every role is <code>one</code>, the type is <em>fixed-arity</em> and records need no role IDs: a slot's position is its role.</p>
+<p>Role fillers are always nodes (ADR 0028). A literal value of the meeting, such as its date, is not a role. It is a <em>literal attribute</em>: an inline property of <code>e1</code>, stored in <code>props[e1]</code> like any other property. The type may declare it next to the roles.</p>
+<pre><code><span class="c"># sketch, syntax not final: the spec defines what is declared, not how it is written</span>
+hyperedge type :Meeting {
+  :agent  one  node
+  :target one  node
+  :topic  one  node
+  attribute :when xsd:date   <span class="c"># a literal attribute: an inline property of e, not a role</span>
+}</code></pre>
+<p>Writing a hyperedge whose roles do not match its type fails with <code>HyperedgeShapeMismatch</code>. Adding an optional role later rewrites nothing; removing a role or changing its cardinality is an online migration.</p>
+
+<h3>Write it</h3>
+<pre><code><span class="c"># sketch, syntax not final: lowers to the IR operation CreateHedge(:Meeting, roles)</span>
+create :Meeting { :agent :alice, :target :bob, :topic :pricing } :when "2026-11-20"^^xsd:date
+<span class="c"># returns a hyperedge ID, e1 (kind tag 0x6); :when is written to props[e1]</span></code></pre>
+
+<h3>What is stored</h3>
+<figure>
+<svg viewBox="0 0 660 250" role="img" aria-label="One hedge record for e1 holds the type Meeting and three slots: alice, bob and pricing. Beside it, the property record of e1 holds the date. Three incidence keys point back to e1: alice agent Meeting e1, bob target Meeting e1, pricing topic Meeting e1. The date has no incidence key.">
+  <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="13" text-anchor="middle" stroke="#3a2208" stroke-width="2">
+    <rect x="20" y="20" width="90" height="40" fill="#8cc43f"/>
+    <rect x="110" y="20" width="110" height="40" fill="#f2b84b"/>
+    <rect x="220" y="20" width="100" height="40" fill="#fff3d6"/>
+    <rect x="320" y="20" width="100" height="40" fill="#fff3d6"/>
+    <rect x="420" y="20" width="100" height="40" fill="#fff3d6"/>
+    <rect x="530" y="20" width="126" height="40" fill="#fff3d6" stroke-dasharray="5 3"/>
+    <rect x="80" y="140" width="480" height="32" fill="#fff3d6"/>
+    <rect x="80" y="172" width="480" height="32" fill="#fff3d6"/>
+    <rect x="80" y="204" width="480" height="32" fill="#fff3d6"/>
+    <g fill="#3a2208" stroke="none">
+      <text x="65" y="45" font-weight="700">hedge e1</text>
+      <text x="165" y="45">type :Meeting</text>
+      <text x="270" y="45">:alice</text><text x="370" y="45">:bob</text>
+      <text x="470" y="45">:pricing</text>
+      <text x="593" y="36" font-size="11">props[e1]</text><text x="593" y="52" font-size="11">:when 2026-11-20</text>
+      <text x="320" y="161">incidence (:alice,   :agent,  :Meeting, e1)</text>
+      <text x="320" y="193">incidence (:bob,     :target, :Meeting, e1)</text>
+      <text x="320" y="225">incidence (:pricing, :topic,  :Meeting, e1)</text>
+    </g>
+  </g>
+  <g stroke="#c9852c" stroke-width="2.5" fill="none">
+    <path d="M270 62 V100 H160 V138"/><path d="M370 62 V110 H320 V138"/><path d="M470 62 V100 H480 V138"/>
+  </g>
+</svg>
+<figcaption>One <code>hedge</code> record keyed by the hyperedge ID, and one <code>incidence</code> key per node filler. The date is a literal attribute in <code>props[e1]</code> (dashed), not in the record, and gets no incidence key; finding meetings by date needs a value index on <code>:when</code>.</figcaption>
+</figure>
+<div class="tablewrap"><table>
+  <tr><th>Table</th><th>Key</th><th>Value</th></tr>
+  <tr><td><code>hedge</code></td><td><code>e</code></td><td>version, flags, role count k, type T, then k node IDs in declared role order (fixed arity) or k sorted <code>(role, node)</code> pairs (variable)</td></tr>
+  <tr><td><code>incidence</code></td><td><code>(node, role, type, e)</code></td><td>none</td></tr>
+</table></div>
+<p>Hyperedge IDs come from chunks leased per home graph and type, so all meetings sit in a few ID ranges, and the type of any hyperedge can be read from its chunk without decoding the record.</p>
+
+<h3>Read it</h3>
+<p>Queries see the star expansion as <strong>role triples</strong>, <code>(e, rdf:type, T)</code> and <code>(e, r, n)</code>. They are virtual: produced from <code>hedge</code> and <code>incidence</code>, never stored. The date is read like any inline property, as the triple <code>(e1, :when, "2026-11-20")</code>.</p>
+<pre><code>PREFIX : &lt;http://example.org/&gt;
+SELECT ?e ?topic ?when WHERE {
+  ?e a :Meeting ; :agent :alice ; :target :bob ; :topic ?topic ; :when ?when .
+}</code></pre>
+<p>With <code>:alice</code> bound, the plan is one <code>incidence</code> prefix scan on <code>(:alice, :agent, :Meeting)</code> and one <code>hedge</code> read per hit, plus one <code>props[e1]</code> read for <code>:when</code>. From v2, the spec has the planner collapse a star of role patterns of one fixed-arity type into a single scan of the type's records, with no join. In v0 the same pattern runs as a join of virtual role relations.</p>
+
+<div class="tablewrap"><table>
+  <tr><th>Lookup</th><th>Access</th></tr>
+  <tr><td>hyperedge by ID</td><td><code>hedge</code> point read</td></tr>
+  <tr><td>all hyperedges of type T</td><td>T's chunk ranges over <code>hedge</code></td></tr>
+  <tr><td>where does n fill any role?</td><td><code>incidence</code> prefix <code>(n)</code></td></tr>
+  <tr><td>where does n fill role r of type T?</td><td><code>incidence</code> prefix <code>(n, r, T)</code></td></tr>
+</table></div>
+
+<h3>Change and delete it</h3>
+<ul>
+  <li><strong>Update in place.</strong> Changing one filler (the topic becomes <code>:discounts</code>) rewrites one slot, deletes one incidence key and inserts one. The ID <code>e1</code> stays, and so do statements about <code>e1</code>.</li>
+  <li><strong>Deleting a filler is guarded.</strong> Deleting <code>:bob</code> while he fills a role fails with <code>ReferencedByHyperedge</code>. With <code>DETACH</code>, the whole hyperedge is deleted. A role is never set to null behind your back.</li>
+  <li><strong>Deleting the hyperedge</strong> removes its record and incidence keys and cascades to statements about it.</li>
+</ul>
+
+<h3>Annotate one role</h3>
+<p>A role triple has no statement ID until something annotates it. Annotating it promotes it: the spec allocates a statement ID and stores a pointer in <code>hedge_promo</code>, keyed <code>(e, role, node)</code>. The role stays served from the record.</p>
+<pre><code><span class="c"># how sure are we that Alice called the meeting?</span>
+INSERT { ?e :agent :alice {| :confidence 0.7 |} }
+WHERE  { ?e a :Meeting ; :agent :alice ; :target :bob }</code></pre>
+
+<h3>Cost</h3>
+<div class="tablewrap"><table>
+  <tr><th>Encoding of e1</th><th>Base-table writes</th><th>Change the topic</th><th>Shape checked</th></tr>
+  <tr><td>A. node + 5 role statements</td><td>17</td><td>7 (3 deletes, 3 inserts, <code>stmt</code>)</td><td>only by a shape</td></tr>
+  <tr><td>B. hyperedge record + date property</td><td>5 (1 <code>hedge</code> + 3 <code>incidence</code> + 1 <code>props</code>)</td><td>3 (1 slot, 1 key out, 1 key in)</td><td>always, against the type</td></tr>
+</table></div>
+<p>Write counts follow the operation table in the data model spec: 4 writes per node-valued statement, 1 per inline property. In A that is four node-valued statements (type and three roles) plus the date. Times are still to be measured.</p>
+
+<h2>C. What tiramemsu does</h2>
+<p>tiramemsu, the sibling store, has no hyperedge record. A row has exactly two ends, so it offers two patterns:</p>
+<pre><code><span class="c"># when the relationship is the main thing: a node with roles</span>
+INSERT DATA { v:m1 a v:Meeting ; v:participant v:alice, v:bob, v:carol ; v:decided v:d1 . }
+
+<span class="c"># when there is a natural binary core: annotate the edge</span>
+INSERT DATA { v:alice v:meets v:bob {| v:with v:carol ; v:with v:dave |} }</code></pre>
+<p>The second pattern gives the extra ends the edge's own lifetime and cascade. A typed layer, <code>(v:with sys:subjectType sys:STMT)</code>, rejects a role written on a plain node by mistake. tiramemsu rejected content-addressed hyperedges, whose ID is a hash of the members, because they cannot say the same meeting happened twice. graphlava's allocated hyperedge IDs make the same choice.</p>
+<p>The binary-core pattern also works in graphlava: <code>:alice :met :bob {| :topic :pricing |}</code> stores the topic as an annotation on the statement's ID.</p>
+
+<h2>Directed hyperedges and set-to-set edges</h2>
+<p>Direction is a property of roles, not of the store. A directed hyperedge <code>(tail, head)</code> is a type with a "from" role and a "to" role. A Basu–Blanning metaedge, set to set, is the same type with both roles of cardinality <code>many</code>, which graphlava stores in the variable record:</p>
+<pre><code><span class="c"># sketch, syntax not final</span>
+hyperedge type :Handover { :from many node   :to many node }
+create :Handover { :from :alice, :from :bob, :to :carol }</code></pre>
+
+<h2>When to choose which</h2>
+<div class="tablewrap"><table>
+  <tr><th>Situation</th><th>Choose</th></tr>
+  <tr><td>Fixed roles, many instances, star queries (meetings, enrolments, transactions)</td><td>graphlava hyperedge type</td></tr>
+  <tr><td>Roles vary a lot per instance, or the data must stay portable RDF</td><td>A: node + role statements</td></tr>
+  <tr><td>One binary fact with a few qualifiers</td><td>Binary statement with annotations</td></tr>
+  <tr><td>Most roles will carry their own annotations</td><td>A, or a hyperedge with promoted roles</td></tr>
+</table></div>
+
+<div class="note">
+<p><strong>In graphlava.</strong> A hyperedge is one record of a declared type, indexed once per node filler. Literal values such as a date are inline properties of the hyperedge, not roles. Queries see role triples that cost nothing to store. Roles are checked against the type, updates keep the hyperedge ID, deleting a filler needs <code>DETACH</code>, and annotating a role promotes just that role.</p>
+</div>
+
+<div class="pager">
+  <a class="prev" href="04-statement-graphs.html">← Chapter 4</a>
+  <a href="index.html">Contents</a>
+  <a class="next" href="06-statements-about-statements.html">Chapter 6: Statements about statements →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

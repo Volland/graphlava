@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>graphlava and tiramemsu: two stores from one idea</title>
+<meta name="description" content="graphlava and tiramemsu both store every fact as a statement with an ID. tiramemsu keeps every change with two clocks; graphlava keeps only the current state and overwrites in place. What they share, where they split, and which to pick.">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="graphlava and tiramemsu: two stores from one idea">
+<meta property="og:description" content="Mutable current state versus layered, never-forget memory.">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/" aria-current="page">Articles</a>
+    <a href="../book/">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+  <p class="kicker">Article</p>
+  <h1>graphlava and tiramemsu: two stores from one idea</h1>
+  <p class="byline">graphlava articles · 24 November 2026</p>
+  <p class="standfirst">Both projects start from the same sentence: every fact is a statement with its own ID, and an ID can be talked about. tiramemsu then decides never to forget. graphlava decides to remember only what is true now, and to do that fast. The rest of each design follows from that one choice.</p>
+
+  <h2>Two desserts, one recipe</h2>
+  <p><a href="https://www.tiramemsu.com">tiramemsu</a> is an embedded graph database for agent memory. It was built in September and October 2026 and is released as 0.12 on crates.io, PyPI and npm. Its logo is a tiramisu whose layers are a graph. graphlava (working name <code>meta-core</code> in its specs) is a sibling project in design. Its logo is a diamond of baklava: layers on the side, a hyperedge on top.</p>
+  <p>The two are standalone. graphlava's specs say so directly: time travel, audit history and bitemporality are tiramemsu's job, and graphlava shares no log format with it. They are separate products for separate workloads, not a fork and its parent.</p>
+
+  <h2>What they share</h2>
+  <ul>
+    <li><strong>Statements with IDs.</strong> In both, a fact is a subject, predicate and object with an ID, and that ID can be the subject of another statement. Confidence, source and belief are statements about statements, to any depth.</li>
+    <li><strong>The predicate is an IRI.</strong> Neither lets an edge stand in predicate position. Role statements say the same thing.</li>
+    <li><strong>One IR under several languages.</strong> tiramemsu compiles SPARQL and openCypher to one logical IR. graphlava compiles SPARQL 1.2 and Datalog (v0) and a Cypher subset (v1) to one extended-Datalog IR.</li>
+    <li><strong>Datalog.</strong> tiramemsu has an opt-in Datalog crate with temporal operators. graphlava has Datalog as a first-class query surface from v0, with materialised rules in v1.</li>
+    <li><strong>redb.</strong> graphlava stores everything in one redb file. tiramemsu runs on SQLite by default and on redb as an experimental second engine. graphlava's decision record for redb notes that tiramemsu already uses it.</li>
+    <li><strong>Embedded, for agents.</strong> Both are libraries that live inside the agent's process and hold one memory per file.</li>
+  </ul>
+
+  <h2>Where they split: time</h2>
+  <p>A tiramemsu statement is a row that is never deleted and never edited. Next to <code>(eid, s, p, o)</code> it carries two clocks: when the database believed it (added and retracted) and when it was true (valid from and valid to). SQLite triggers inside the file reject <code>DELETE</code> and any second change to a row. Forgetting means retracting. Correcting means <code>supersede</code>: a new statement replaces the old one, and the layers on the old one are replayed onto the new one. You can ask what the memory believed at any past moment.</p>
+  <p>graphlava has no clocks at all. Its first two goals, in order, are performance on the agent-memory mix (small write transactions, frequent value overwrites, point lookups, short traversals, star patterns) and mutable current state: no transaction time, no valid time, no history. A statement's object can change in place, and the ID stays:</p>
+<pre><code><span class="c"># graphlava: the same reifier on both sides keeps the statement ID</span>
+DELETE { &lt;&lt; :alice :worksAt ?old ~ ?r &gt;&gt; }
+INSERT { &lt;&lt; :alice :worksAt :globex ~ ?r &gt;&gt; }
+WHERE  { &lt;&lt; :alice :worksAt ?old ~ ?r &gt;&gt; }</code></pre>
+  <p>After that request, <code>?r :confidence 0.9</code> still holds, and <code>(:alice :worksAt :acme)</code> is gone from every index. In tiramemsu the same correction leaves the Acme row in place with a retraction time, adds a Globex row, and copies the layers across. Both are right for what they promise. One keeps the past. The other keeps the present small.</p>
+  <p>graphlava can also make this the default for a predicate. Declared <code>functional</code> (ADR 0028), <code>:worksAt</code> allows one employer per person, and a plain insert of the new employer updates the statement in place, keeping its ID, confidence and source.
+  <p>Delete differs the same way. A graphlava delete really deletes: the statement, every statement whose subject is it, transitively, in one transaction, and IDs are never reused. tiramemsu's retraction also cascades (over statements whose subject <em>or</em> object is the retracted ID), but every cascaded row stays readable as of the moment before.</p>
+
+  <div class="tablewrap"><table>
+    <tr><th></th><th>tiramemsu</th><th>graphlava</th></tr>
+    <tr><td>State kept</td><td>Every version, transaction time and valid time</td><td>Current state only</td></tr>
+    <tr><td>Correct a fact</td><td><code>supersede</code>: new statement, layers replayed</td><td>update in place, same ID</td></tr>
+    <tr><td>Remove a fact</td><td>Retract; the row stays, with a retraction time</td><td>Delete; annotations cascade and are gone</td></tr>
+    <tr><td>Cascade follows</td><td>subject and object references</td><td>subject references (annotations)</td></tr>
+    <tr><td>Past views</td><td><code>as_of</code>, <code>history</code>, <code>valid_at</code></td><td>None, by design</td></tr>
+  </table></div>
+
+  <h2>Where they split: structure</h2>
+  <h3>n-ary relations</h3>
+  <p>tiramemsu rows have exactly two ends. A meeting with three participants is a node with role statements, or a binary edge with extra ends as annotations. Both are plain rows, so they get time and cascade for free.</p>
+  <p>graphlava has a fourth kind of item, the <strong>hyperedge</strong>. Its type and roles are declared in the meta-model. Roles hold nodes; a literal such as a meeting's date is an inline property of the hyperedge (ADR 0028). It is stored as one record holding all role fillers, plus one <code>incidence</code> key per filler, and it is not written to the triple orderings. Queries see the roles as virtual triples. A role filling gets a statement ID only when something annotates it.</p>
+<pre><code><span class="c"># reads the same in both stores; in graphlava the roles come from one record</span>
+SELECT ?a ?t WHERE { ?e a :Meeting ; :agent ?a ; :target ?t }</code></pre>
+
+  <h3>Graphs</h3>
+  <p>In tiramemsu a named graph is a tag. Membership is one more layer statement, <code>(e sys:inGraph g)</code>, and a graph can be named by a node or by a statement, so an edge can hold a subgraph of its own. Nesting is an ordinary statement between graphs, walked with a path.</p>
+  <p>In graphlava a graph is its own kind of ID. Each statement's ID comes from a chunk leased to one graph, so its home graph is read off the ID and costs no bytes. Extra memberships are entries in a <code>gmem</code> table. As in tiramemsu, a fact in several graphs stays one statement with one ID: inserting it into a second graph adds a membership, and deleting it inside one graph removes only that membership (ADR 0024). Nesting is a DAG kept with its closure, so <code>GRAPH :g</code> matches g and everything under it with one range filter, and a cycle is rejected at write time. Giving an edge its own contents is a pattern here (annotate the statement with a graph), not a built-in.</p>
+
+  <h3>Duplicates</h3>
+  <p>tiramemsu keeps every occurrence of a triple as its own row, because "Alice left Acme and came back" is two episodes with two histories. graphlava keeps one statement per <code>(s, p, o)</code> by default and allows parallel statements only on predicates declared <code>multi</code>. Without history, a second copy of the same fact usually has nothing to say.</p>
+
+  <h2>Where they split: maturity</h2>
+  <p>This is the largest difference today. tiramemsu is released software with SPARQL, openCypher, paths, text and vector recall, N3, Datalog and ELPI reasoning, an MCP server, Python and Node bindings, and a WebAssembly build. graphlava is a set of specifications, 30 decision records and a Rust workspace with CI for Linux, macOS, Windows, iOS and Android. Its engine is not written. The first step on its roadmap is an engine bake-off that measures redb against libmdbx and Sanakirja before any engine code is written.</p>
+
+  <h2>The planned comparison</h2>
+  <p>graphlava's benchmark plan has a section called <em>Versus tiramemsu</em>: the same dataset and workload on both, at 1, 10 and 100 versions per fact. The metrics are p50 and p99 latency of the agent-memory mix, file size and write throughput, per version count.</p>
+  <p>The stated expectation is that the two are close at one version per fact, and that graphlava pulls ahead as history grows, because it carries none. If graphlava is not ahead at 10 and 100 versions, the plan reads that as a bottleneck in the query layer, not in storage. This is an expectation written before any code. The target in the spec is "to be measured", and this article reports no result.</p>
+  <div class="note"><p>The comparison is fair only for workloads that do not need the past. A query like "what did the agent believe last Tuesday" has no graphlava answer at any speed.</p></div>
+
+  <h2>Which one to use</h2>
+  <p>Pick <strong>tiramemsu</strong> when:</p>
+  <ul>
+    <li>the agent must be able to say what it believed, and when, or why it changed its mind;</li>
+    <li>you need an audit trail in which nothing is ever deleted, only retracted;</li>
+    <li>you need valid time: facts true over an interval, time-respecting paths;</li>
+    <li>you need it to work today, in Rust, Python, Node or the browser.</li>
+  </ul>
+  <p>Watch <strong>graphlava</strong> when:</p>
+  <ul>
+    <li>the memory is a working state that is overwritten often, and history is noise;</li>
+    <li>you have real n-ary relations and want them stored once, not as a node plus k role rows;</li>
+    <li>you have many small nested scopes (episodes inside sessions inside agents) and want scoped queries to cost in proportion to the scope;</li>
+    <li>you want Datalog rules inside the engine, and one file that also opens on iOS and Android.</li>
+  </ul>
+  <p>The two also fit together. An agent can keep its long-term, auditable memory in tiramemsu and a fast working set in graphlava, with the same statement-with-ID model on both sides. There is no shared format between them, so moving data across is an export and an import, for example through SPARQL.</p>
+
+  <h2>The short version</h2>
+  <p>Same recipe: statements with IDs, layers of statements about statements, one IR under several languages. Different desserts. tiramemsu keeps every layer it ever baked. graphlava keeps one fresh piece, cut to shape, with a pistachio in the middle for the relations that have more than two ends.</p>
+
+  <h2>References</h2>
+  <ol class="refs">
+    <li>Tiramemsu: README and design notes. <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a>; <a href="https://www.tiramemsu.com">tiramemsu.com</a>.</li>
+    <li>Tiramemsu. <a href="https://www.tiramemsu.com/articles/metagraphs.html">Metagraphs from one row shape</a>, 2026.</li>
+    <li>graphlava specifications: overview (goals and non-goals), data model, hyperedges, named and nested graphs, benchmarks; decision records 0002, 0004 and 0006. <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a>.</li>
+  </ol>
+
+  <div class="pager">
+    <a href="statement-graphs.html">← Statement graphs</a>
+    <a class="next" href="graphlava-and-neptune.html">graphlava and Neptune OneGraph →</a>
+  </div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

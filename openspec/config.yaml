@@ -1,47 +1,152 @@
 schema: spec-driven
+
+# ---------------------------------------------------------------------------
+# Project context: facts an agent cannot infer from the code. Discoverable
+# detail lives in tg.md/ (specs 00–21), docs/adr/ and CONTEXT.md; read those.
+# ---------------------------------------------------------------------------
+context: |
+  # meta-core (repo: graphlava)
+
+  meta-core is an embedded, mutable, current-state-only metagraph database in
+  Rust, tuned for agent memory: many small write transactions, value overwrites,
+  point lookups, 2–3 hop traversals and star patterns. It is one file on redb,
+  opened by exactly one owner process (ADR 0002).
+
+  ## Sources of truth (in priority order)
+  1. docs/adr/NNNN-*.md: accepted decisions. Never contradict one silently;
+     propose a superseding ADR instead.
+  2. tg.md/ (typed lat.md graph): 00-overview → 18-roadmap are the layer
+     specs; 19-verification is the assurance strategy, 20-proofs the Lean
+     proof ledger, 21-e2e-tests the end-to-end catalogue, 17-benchmarks the
+     measurement plan. Query it with `tg search`, `tg section`, `tg cypher`.
+  3. CONTEXT.md: the glossary. Use its bold terms exactly (Statement, Graph,
+     Scope, Hyperedge, Inline property, Promotion, Chunk, Derived fact,
+     Owner process, Durability level, Multi predicate, Partitioned graph) and
+     never their listed "Avoid" synonyms (triple, edge, context, shard, ...).
+  4. openspec/: capability requirements and changes. A requirement is cited
+     everywhere as [[openspec:<capability>#<Requirement>]].
+
+  ## Architecture (each layer calls only the layer below)
+  surfaces (SPARQL 1.2, Datalog; Cypher subset in v1) → extended-Datalog IR
+  → planner (statistics, plan cache) → vectorised executor (Leapfrog
+  Triejoin, index nested-loop, merge/hash joins) → Datalog evaluation / IVF+RaBitQ vectors (v1)
+  → data model (statements, inline properties, hyperedges, graphs)
+  → dictionary + 64-bit ID encoding → transactions (single writer, group
+  commit, cascade delete) → Storage trait → redb file.
+  The IR is the only meeting point of query surfaces; the Storage trait is the
+  only code that knows the engine.
+
+  ## Invariants that are frozen or near-frozen
+  - IDs: u64, top 4 bits = kind tag, chunked kinds split 40-bit chunk + 20-bit
+    offset, inline literals tag 0x8 with order-preserving payloads (ADR 0011).
+    IDs are never reused. Canonicalisation table is part of the file format.
+  - Statements: unique (s,p,o) unless the predicate is `multi`; update in place
+    keeps the ID; delete cascades to annotations; hyperedge roles block delete.
+  - Graph nesting is a DAG (depth limit 64); GRAPH scope is transitive by
+    default, GRAPH! is direct (ADRs 0007, 0008).
+  - Durability levels sync / ordered (group commit) / relaxed; every effect of
+    a transaction is atomic (ADR 0012).
+  - One portable little-endian file format with feature flags, frozen at the
+    end of v0 (ADR 0018). After the freeze any byte-level change needs a
+    format version bump and a migration.
+
+  ## Non-goals (reject or redirect requests that need them)
+  Time travel / history (sibling project tiramemsu), multi-process open of
+  one file, distribution or replication, full-text search in the core.
+
+  ## Platforms
+  Linux, macOS, Windows, iOS, Android (16 KB page alignment, iOS suspend
+  lock rules). Rust edition 2024, MSRV 1.85, no `unsafe` without a SAFETY
+  comment, `unsafe_op_in_unsafe_fn` denied, clippy -D warnings.
+
+  ## Assurance strategy (tg.md/19-verification.md, ADR 0019)
+  Correctness is argued at seven levels, strongest first:
+    L0 Lean 4 proof: theorems about the abstract model in formal/MetaCore/
+       (Id, Store, Nesting, Durability, ...), core Lean only, no Mathlib,
+       zero `sorry`, checked by `lake build` + formal/scripts/lean-audit.sh.
+    L1 Refinement: `lake exe oracle <seed> <n>` emits JSON-lines traces from
+       the executable Lean model; Rust replays them against the real store and
+       must match op by op (the Rust code refines the model).
+    L2 Property tests (proptest) against a naive in-memory model, for what
+       the Lean model abstracts away (layouts, orderings, inline routing).
+    L3 End-to-end scenarios through the public API on a real file
+       (tg.md/21-e2e-tests.md), including cross-process and FFI.
+    L4 Crash / fault injection: kill -9 a child process at every commit point
+       and check the recovered state is a durable prefix (Lean: Durability).
+    L5 Conformance suites: W3C SPARQL 1.1/1.2, Nemo-compatible Datalog corpus.
+    L6 Benchmarks with regression gates (tg.md/17-benchmarks.md, ADR 0020).
+  An invariant (uniqueness, identity, order, acyclicity, atomicity,
+  durability, never-reuse) is not "done" with tests alone: it needs an L0
+  theorem or an open proof obligation (PO-*) recorded in tg.md/20-proofs.md.
+
+  ## Benchmark discipline (ADR 0020)
+  Every performance claim names a Benchmark section. Micro benches (criterion)
+  live in crates/*/benches; the macro harness (agent-memory mix, LUBM, WatDiv,
+  BSBM, LDBC SNB-style traversals) lives in bench/. PR CI gates on
+  instruction counts (deterministic); nightly runs wall-clock macro benches on
+  a fixed runner and fails on a regression beyond the threshold with 95%
+  confidence. Latencies are p50/p99/p99.9 with HDR histograms, open-loop where
+  coordinated omission matters; every result records hardware, OS, file system,
+  build flags, dataset seed and commit.
+
+  ## Tooling
+  cargo (fmt, clippy, test, bench), lake/elan (Lean 4.36), tg (typed graph
+  checks: `tg check`, `tg ontology check`, `tg trace --gaps`), openspec.
+
+# ---------------------------------------------------------------------------
+# Per-artifact rules
+# ---------------------------------------------------------------------------
 rules:
   proposal:
     - "tg: Run `tg ontology` and use its type and edge names throughout. Under Impact, list the lat.md sections this change touches (find them with `tg search`), the decisions and constraints that bind the area (`tg cypher` over `motivated_by`, `constrains` and `contradicts` edges), and the requirements it adds or modifies as `[[openspec:<capability>#<Requirement>]]`."
+    - "Scope: respect the build order of ADR 0013 and the non-goals in tg.md/00-overview.md#Non-goals. A change that needs a non-goal is out of scope; say so instead of designing around it."
+    - "Assurance: under Impact add a 'Verification' line listing, per added or modified requirement, its target assurance levels (L0–L6 from tg.md/19-verification.md). Every invariant-style requirement must name the Lean theorem it will get or the PO-* obligation it opens."
+    - "Performance: every performance claim names the Benchmark section in tg.md/17-benchmarks.md that checks it, or adds one, and names the existing benchmarks the change could regress."
+    - "File format: if the change alters on-disk bytes (ID layout, key byte order, tables, canonicalisation, feature flags), say so under Impact; after the v0 freeze this needs a format version bump and a migration (ADR 0018)."
+    - "Write for the maintainer: under 600 words, plain sentences, no marketing language."
   specs:
     - "tg: Give every requirement a stable, unique name: code, tests and docs cite it as `[[openspec:<capability>#<Requirement>]]`, and a renamed requirement breaks those links."
     - "tg: Give every scenario a unique name within its requirement; tests cite it as `[[openspec:<capability>#<Requirement>#<Scenario>]]`."
+    - "State each requirement with SHALL / SHALL NOT, observable through a public surface (Rust API, C FFI, SPARQL, Datalog), never through internal tables, so it can be both modelled in Lean and tested end to end."
+    - "After the requirement sentence, add `Formal:` with the Lean theorem name(s) that prove it (e.g. `MetaCore.Store.update_wf`), or `PO-<ID> (open)`, or `none — <reason>` when the property lies outside the model (performance, parsing, platform behaviour)."
+    - "Give every requirement at least one positive scenario and one negative or boundary scenario. Use the real limits: integers ±2^57, doubles with exponent in [-255, 254], strings of 7 bytes, chunk offset 2^20−1, nesting depth 64, empty graph, empty transaction, unknown feature flag."
+    - "Start each scenario body with a `Level:` line (unit | property | refinement | e2e | crash | conformance | benchmark) naming the test level that proves it; at least one scenario per requirement must be e2e or crash."
+    - "WHEN/THEN use concrete values and glossary terms from CONTEXT.md; THEN states an observable result, never an implementation step."
+    - "A performance requirement states metric, unit, percentile, dataset size, durability level and hardware class, a pass line or 'to be measured', and cites its Benchmark section."
   design:
     - "tg: Write each decision so it can become a lat.md `Decision` section: the choice, the alternatives rejected, and its reasons as named relations from `tg ontology` (`motivated_by` a constraint or concept, `supersedes` an earlier decision), linking the sections with `[[section]]` references."
     - "tg: Name the external rules the design must respect as constraints, with what each binds, so they can become `Constraint` sections with `constrains` edges."
+    - "Formal model: include a 'Formal model' section that names the Lean modules in formal/MetaCore/ that change, gives every new definition and every theorem statement in Lean syntax before it is proved, lists each assumption the Rust code must uphold (it becomes an `<assumption>` in tg.md/20-proofs.md), and says how the oracle (formal/Main.lean) is extended to emit the new operations."
+    - "Refinement: state the abstraction function from the Rust state (redb tables) to the Lean model state and the per-operation simulation obligation the replay test checks."
+    - "Test strategy: map every requirement to assurance levels L0–L6, describe the E2E scenarios (public API, real file, process boundaries) and the crash points for fault injection; justify any invariant without L0 or L1 coverage."
+    - "Cost model: for each new or changed operation give its cost in B-tree operations per write (the table form of tg.md/01-data-model.md#Operations), its read path in index ranges, its asymptotic complexity and its bytes per statement."
+    - "Benchmarks: give workload, dataset generator and seed, metrics, percentiles, baseline, pass line and regression threshold; reuse sections of tg.md/17-benchmarks.md where they fit."
+    - "Failure model: list crash points, error cases and what is atomic; any new durable state commits in the same transaction as the writes that use it."
   tasks:
     - "tg: For each requirement, include a task to annotate the code that implements it with a comment `@tg: implements:: [[openspec:<capability>#<Requirement>]]` on the line above the function, class or file, with properties such as `{confidence: partial}` when they apply."
-    - "tg: For each scenario, include a task to annotate the test that proves it with a comment `@tg: verifies:: [[openspec:<capability>#<Requirement>#<Scenario>]]` directly above the test call."
+    - "tg: For each scenario, include a task to annotate the test that proves it with a comment `@tg: verifies:: [[openspec:<capability>#<Requirement>#<Scenario>]]` directly above the test call, with `{level: unit|integration|e2e}`."
     - "tg: Include a task to record the design's decisions and constraints in lat.md as typed sections (`type: Decision`, `type: Constraint`) with typed edge lines such as `- motivated_by:: [[constraints#<Constraint>]]` and `- constrains:: [[openspec:<capability>#<Requirement>]] {strength: must}`, using only edge names `tg ontology` lists."
     - "tg: Include a task to update the lat.md section that explains each capability and list the capability in that file's `openspec:` frontmatter."
-    - "tg: End with a task to run `tg check`, `tg ontology check` and `tg trace <capability> --gaps` and close every gap they report."
+    - "Order each capability group as: (1) Lean model and theorems, (2) failing tests (unit, property, refinement replay, e2e, crash), (3) implementation, (4) benchmarks, (5) annotations. Tests are written red before the code that makes them green."
+    - "Formal tasks: state and prove the theorems in formal/MetaCore/ with zero `sorry`; add or update the `Proof` section in tg.md/20-proofs.md with `proves::` edges and `{theorem, status}`; extend formal/Main.lean so the oracle emits the new operations; run `lake build` and `formal/scripts/lean-audit.sh`."
+    - "Refinement tasks: replay oracle traces (at least seeds 1..64 × 2,000 operations) in crates/meta-core/tests/refinement.rs and compare every result and the final state through the abstraction function."
+    - "E2E tasks: for each scenario marked `Level: e2e` or `crash`, add a test under crates/meta-core/tests/e2e/ that opens a real file in a temp dir through the public API (and the C FFI where the scenario names it), and a catalogue entry in tg.md/21-e2e-tests.md."
+    - "Benchmark tasks: add or extend a criterion micro bench in crates/meta-core/benches/ and, for workload claims, a macro workload in bench/; record the baseline JSON; wire the instruction-count gate into CI."
+    - "Keep each task under one day of work with a checkable outcome (a passing command, a file, a number)."
+    - "tg: End with a task to run `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`, `lake build`, `formal/scripts/lean-audit.sh`, `tg check`, `tg ontology check` and `tg trace <capability> --gaps`, and close every gap they report."
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
-
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+# ---------------------------------------------------------------------------
+# Per-operation guidance
+# ---------------------------------------------------------------------------
+operations:
+  apply:
+    guidance:
+      - "Before implementing a requirement, read its Lean theorem and the `<assumption>` list in tg.md/20-proofs.md; the Rust code must uphold every assumption, ideally with a debug assertion."
+      - "Never weaken a theorem statement, add `sorry`, `admit` or an `axiom`, or delete a failing test to get green. If a proof does not go through, record an open PO-* in tg.md/20-proofs.md and tell the user."
+      - "If the implementation shows the Lean model is wrong (not just incomplete), stop and propose a model change: the model is the specification, not documentation."
+      - "After any change to statement-store, term-identity, named-graphs or transactions code, run the refinement replay and the crash tests, not only unit tests."
+      - "Do not claim a performance improvement without a benchmark run against the stored baseline; report the delta with its confidence interval."
+  archive:
+    guidance:
+      - "Archive only when every task is checked, `tg trace <capability> --gaps` is clean for the change's capabilities, `lake build` and the Lean audit pass, every `Proof` touched has its final status, and no gated benchmark regressed beyond its threshold."
+      - "Summarise in two to four lines: requirements added, theorems proved, open POs left, benchmark deltas."

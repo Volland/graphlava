@@ -44,3 +44,5 @@ Two key shapes to implement and test. Cypher `CREATE` deviates on non-multi pred
 ## More Information
 
 Resolves handover open question 4. Amends handover D8 and section 3.3.
+
+Amended by [ADR-0024](0024-quad-semantics-membership.md) and [ADR-0028](0028-functional-predicates-literal-roles.md) (2026-11-24): inserting an existing triple into another graph adds a membership; uniqueness is per store; predicates may also be declared `functional`.

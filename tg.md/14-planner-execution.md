@@ -2,13 +2,14 @@
 type: Requirement
 status: draft
 priority: must
-specs: ["adr:0003", "adr:0005", "adr:0009", "adr:0010", "adr:0013", "adr:0015", "adr:0007"]
+specs: ["adr:0003", "adr:0005", "adr:0009", "adr:0010", "adr:0013", "adr:0015", "adr:0007", "adr:0022", "adr:0023", "adr:0027", "adr:0028"]
 ---
 # Planner and execution
 
 How a query in the shared IR becomes a physical plan and runs: statistics, cost model, join selection, Leapfrog Triejoin, vectorized batches, late materialization, plan cache and on-demand orderings.
 
 - follows_from:: [[adr:0015]]
+- follows_from:: [[adr:0027]]
 - follows_from:: [[adr:0003]]
 - depends_on:: [[10-ir#Operators]] {strength: hard}
 - depends_on:: [[04-physical-layout#Tables]] {strength: hard}
@@ -18,7 +19,7 @@ How a query in the shared IR becomes a physical plan and runs: statistics, cost 
 
 The planner turns one IR program into a physical plan over the orderings, `props`, hyperedge records and graph ranges. The goal is low latency for agent-memory queries: point lookups, 2–3 hop traversals and star patterns.
 
-Scope in v0: statistics, cost-based join ordering, Leapfrog Triejoin, merge and hash joins, vectorized operators, late materialization, plan cache. SIMD block decode and hyperedge star-pattern collapse arrive in v2 ([[18-roadmap#v2]]).
+Scope in v0: statistics, cost-based join ordering, index nested-loop joins, Leapfrog Triejoin, merge and hash joins, a BFS path kernel, vectorized operators, late materialization, plan cache. SIMD block decode and hyperedge star-pattern collapse arrive in v2 ([[18-roadmap#v2]]).
 
 <non-goal>
 
@@ -36,7 +37,7 @@ Statistics the planner reads to estimate cardinalities and choose plans. All are
 
 | Statistic | Key | Content | Updated |
 | --- | --- | --- | --- |
-| Predicate counts | `p` | statements, distinct `s`, distinct `o` | at commit (exact counts, approximate distincts via HyperLogLog) |
+| Predicate counts | `p` | statements, distinct `s`, distinct `o`; `functional` predicates have exactly one `o` per `s` | in memory at commit, persisted with the batch commit (exact counts, approximate distincts via HyperLogLog) |
 | Characteristic sets | set of predicates of a subject | number of subjects with exactly that set, per-predicate multiplicity | background pass |
 | Hyperedge type stats | hyperedge type `T` | count, per-role distinct nodes | at commit |
 | Graph stats | graph `g` | statement count, chunk count, descendant count | at commit |
@@ -66,16 +67,17 @@ The background pass costs one scan of SPO, O(N) in statements; its runtime at 10
 
 ## Join selection
 
-How the planner picks a join algorithm and a scope plan for each IR conjunction. Cyclic patterns go to Leapfrog Triejoin; acyclic ones to merge or hash joins; graph scopes pick one of three plans.
+How the planner picks a join algorithm and a scope plan for each IR conjunction. Selective acyclic joins use index nested loops, large ones merge or hash joins, cyclic ones Leapfrog Triejoin; scopes pick one of three plans.
 
 - follows_from:: [[adr:0003]]
 - follows_from:: [[adr:0007]]
+- follows_from:: [[adr:0027]]
 - depends_on:: [[09-graphs#Scope expansion]] {strength: hard}
 - measured_by:: [[17-benchmarks#Engine bake-off]]
 
 <rule id="plan-join-choice" strength="must">
 
-A conjunction whose join hypergraph is cyclic (for example a triangle) is planned with Leapfrog Triejoin when a fitting variable order exists. An acyclic conjunction is planned as a tree of merge joins where both inputs arrive sorted on the join variable, and hash joins otherwise.
+A conjunction whose join hypergraph is cyclic (for example a triangle) is planned with Leapfrog Triejoin when a fitting variable order exists. An acyclic conjunction is planned as a tree of binary joins, each chosen by estimated cost: an index nested-loop join when the outer input is small relative to the inner relation and an ordering has a prefix the join binds; a merge join when both inputs arrive sorted on the join variable; a hash join otherwise.
 
 </rule>
 
@@ -94,6 +96,42 @@ For `GRAPH :g { P }` the planner chooses one of three plans by estimated cost: r
 <rule id="plan-union-sources" strength="must">
 
 A pattern with an unbound predicate reads both the orderings and the inline property records, and the union is deduplicated by statement identity. A pattern with a bound predicate reads only the source its object kind routes to ([[01-data-model#Inline properties]]).
+
+</rule>
+
+### Index nested-loop join
+
+The default join of an agent-memory traversal: each outer row binds a key prefix and probes an ordering by `seek`, so the cost follows the frontier, not the inner relation ([[adr:0027]]).
+
+<rule id="plan-inlj" strength="must">
+
+An index nested-loop join sorts each outer batch on the join key, removes duplicate keys, and probes the inner ordering with forward `seek` calls in key order, so consecutive probes that land on the same leaf cost O(1). Its cost is O(|outer| · log n) at worst, against O(|inner|) for a hash join that builds from the inner side.
+
+</rule>
+
+<example>
+
+<input>
+
+`:alice :knows ?x . ?x :worksAt ?c` with orderings SPO, POS, OSP only; `:alice` knows 40 people and `:worksAt` has 10^7 statements.
+
+</input>
+
+<output>
+
+Scan SPO prefix `(:alice, :knows)` for 40 values of `?x`, sorted. For each, seek SPO prefix `(?x, :worksAt)`: 40 seeks. A hash join would scan all 10^7 `:worksAt` statements from POS, and a merge join on `?x` would need PSO.
+
+</output>
+
+</example>
+
+## Path evaluation
+
+How the `Path` operator runs. Paths with a bound end are reachability searches, so they use a dedicated frontier kernel instead of a general fixpoint ([[adr:0027]]).
+
+<rule id="plan-path-bfs" strength="must">
+
+A `Path` with a bound start or end runs a breadth-first search: each level is one index nested-loop expansion of the frontier batch, and visited nodes are kept in a roaring bitmap. With both ends bound, two searches run from both ends, each level expanding the smaller frontier, and stop when they meet. `min` and `max` bound the depth. A `Path` with both ends unbound compiles to `Fixpoint`.
 
 </rule>
 
@@ -145,6 +183,12 @@ Operators exchange batches of up to 1024 `u64` IDs per column, not single tuples
 <rule id="plan-batch" strength="must">
 
 Every physical operator consumes and produces columnar batches of at most 1024 rows of `u64`. Filters produce a selection vector instead of copying.
+
+</rule>
+
+<rule id="plan-owned-equality" strength="must">
+
+A join, `=`, `DISTINCT` or `GROUP BY` on a column that may hold owned literals ([[03-dictionary#Owned literals]]) compares them by content hash, then bytes, instead of by ID. The planner marks a column owned-free when its source is a node position, an inline-only datatype, or a predicate whose statistics show no owned values, and then compares IDs only.
 
 </rule>
 
@@ -229,6 +273,9 @@ Tests for plans and execution, run against a reference evaluator that uses neste
 
 - Differential test: random BGPs over a random graph, each planned plan versus a naive evaluator, for all scope modes.
 - Leapfrog property test: intersection results equal set intersection for random sorted inputs.
+- Join choice: 2- and 3-hop traversals from a bound node run as index nested-loop joins and read O(frontier) entries, checked by counting `seek` and `next` calls.
+- Path kernel: BFS and bidirectional search agree with `Fixpoint` on random graphs for every `min`/`max`.
+- Owned literals: joins and `DISTINCT` over equal long strings stored in two slots treat them as equal.
 - Plan cache: invalidation after index creation, rule staleness and statistics drift.
 - Crash test: kill during an ordering build, reopen, check the ordering is absent or rebuilt.
 - Benchmarks: [[17-benchmarks#Engine bake-off]], [[17-benchmarks#Ordering count comparison]].

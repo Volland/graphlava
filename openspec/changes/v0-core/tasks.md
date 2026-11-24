@@ -82,10 +82,55 @@
 
 - [ ] 10.1 Implement the Rust API with `sparql()` and `datalog()` entry points and the C FFI ([[16-api#Rust API]], [[16-api#C FFI]])
 - [ ] 10.2 Run [[17-benchmarks#Inline literal range scan]], [[17-benchmarks#Durability commit latency]] and [[17-benchmarks#Dictionary sweep cost]]
-- [ ] 10.3 Freeze the file format ([[18-roadmap#Format freeze]])
+- [ ] 10.3 Freeze the file format ([[18-roadmap#Format freeze]]) only after 11.5 and 13.5 are done
 
-## 11. Documentation and traceability
+## 11. Formal model (Lean 4) — runs alongside groups 3–7
 
-- [ ] 11.1 Record any new decision or constraint from implementation in lat.md as typed sections (`type: Decision`, `type: Constraint`) with edges from `tg ontology` only (`motivated_by`, `constrains`, `follows_from`)
-- [ ] 11.2 Add `openspec: [<capability>]` frontmatter to the lat.md spec file that explains each capability (term-identity → `02-id-encoding`, `03-dictionary`; statement-store → `01-data-model`, `04-physical-layout`; transactions → `06-transactions-durability`; named-graphs → `09-graphs`; hyperedges → `08-hyperedges`; sparql-query → `11-sparql`; datalog-query → `13-datalog`)
-- [ ] 11.3 Run `tg check`, `tg ontology check` and `tg trace term-identity statement-store transactions named-graphs hyperedges sparql-query datalog-query --gaps` and close every gap
+- [x] 11.1 Create the `formal/` Lake project (core Lean 4.36, no Mathlib) with `MetaCore.Id`, `MetaCore.Store`, `MetaCore.Nesting`, `MetaCore.Durability`, zero `sorry` ([[19-verification#Formal model]])
+- [x] 11.2 Add the axiom audit `formal/scripts/lean-audit.sh` and the proof ledger [[20-proofs]] with `proves::` edges
+- [x] 11.3 Add the executable oracle `lake exe oracle <seed> <n>` emitting JSON-lines traces ([[19-verification#Refinement bridge]])
+- [ ] 11.4 Write `crates/meta-core/tests/refinement.rs`: replay seeds 1..64 × 2,000 operations through the public API and compare results and the final state through the abstraction function
+- [ ] 11.5 Close PO-CASCADE-FUEL, PO-ID-STRING and PO-ID-DOUBLE before the format freeze (10.3)
+- [ ] 11.6 Model hyperedges (`MetaCore.Hyperedge`: arity, role validation, delete guard) and prove the guard keeps `RefClosed` for roles
+- [ ] 11.7 Model Datalog stratification and prove PO-STRAT and PO-SEMINAIVE (`MetaCore.Datalog`)
+- [ ] 11.8 Add a `Debug` assertion in the Rust store for each `<assumption>` in [[20-proofs]]
+
+## 12. End-to-end and crash tests
+
+- [ ] 12.1 Create `crates/meta-core/tests/e2e/` with a temp-dir fixture that opens, closes and reopens a real file through the public API only
+- [ ] 12.2 Implement every scenario of [[21-e2e-tests]], each annotated `@tg: verifies:: [[21-e2e-tests#<Scenario>]] {level: e2e}`, then set `lat: require-code-mention: true` in that file
+- [ ] 12.3 Build the crash harness: a child writer killed at every I/O step, checked against `MetaCore.Durability.recover` outcomes, on Linux, macOS and Windows
+- [ ] 12.4 Add the cross-OS golden-file job and the C FFI lifecycle test under ASan and LSan
+- [ ] 12.5 Add the nightly 30-minute soak against the model
+
+## 13. Benchmark harness and regression gates
+
+- [ ] 13.1 Create `bench/` (`meta-bench` binary): dataset generator, agent-memory mix, HDR histograms, open-loop driver, JSON results ([[17-benchmarks#Harness and method]])
+- [ ] 13.2 Add criterion and `iai-callgrind` micro benches for the cases of [[17-benchmarks#Micro benchmarks]]; gate PRs on +3% instructions ([[adr:0020]])
+- [ ] 13.3 Add adapters for SQLite (WAL), Oxigraph and tiramemsu behind the harness trait
+- [ ] 13.4 Wire LUBM, WatDiv and BSBM ([[17-benchmarks#Standard SPARQL workloads]]) and the SNB-style traversal workload
+- [ ] 13.5 Set up the fixed nightly runner, run the scaling sweep, reader scaling, open and recovery time, and space under churn, and store baselines in `bench/results/`
+- [ ] 13.6 Turn each "to be measured" target into a number in a decision record once two nightly runs agree within their confidence intervals
+
+## 14. Documentation and traceability
+
+- [ ] 14.1 Record any new decision or constraint from implementation in lat.md as typed sections (`type: Decision`, `type: Constraint`) with edges from `tg ontology` only (`motivated_by`, `constrains`, `follows_from`)
+- [ ] 14.2 Add `openspec: [<capability>]` frontmatter to the lat.md spec file that explains each capability (term-identity → `02-id-encoding`, `03-dictionary`; statement-store → `01-data-model`, `04-physical-layout`; transactions → `06-transactions-durability`; named-graphs → `09-graphs`; hyperedges → `08-hyperedges`; sparql-query → `11-sparql`; datalog-query → `13-datalog`)
+- [ ] 14.3 Run `cargo test`, `lake build`, `formal/scripts/lean-audit.sh`, `tg check`, `tg ontology check` and `tg trace term-identity statement-store transactions named-graphs hyperedges sparql-query datalog-query --gaps` and close every gap
+
+## 15. Architecture review follow-ups (ADR 0021–0030)
+
+Format-affecting items 15.1–15.4 must be done before the freeze (10.3).
+
+- [ ] 15.1 Implement the prefix-coded inline literal layout ([[adr:0021]], [[02-id-encoding#Inline literals]]) and the `id_layout_matches_model` and `double_magnitude_order` property tests; keep `MetaCore.Id` in step
+- [ ] 15.2 Implement `plist`, the sort-key `propidx` and their invariant checks ([[adr:0022]], [[04-physical-layout#Tables]])
+- [ ] 15.3 Implement the `dt` table, the namespace cap, owned literals and the mark-and-sweep with the kept set ([[adr:0023]], [[03-dictionary#Owned literals]], [[03-dictionary#Sweep]])
+- [ ] 15.4 Implement membership operations, `moved` tombstones, drop that keeps shared items and per-store uniqueness ([[adr:0024]], [[09-graphs#Membership operations]])
+- [ ] 15.5 Implement one engine transaction per batch with per-request overlays and check-then-apply ([[adr:0025]], [[06-transactions-durability#Group commit]]); measure bytes per request at batch sizes 1, 8 and 64
+- [ ] 15.6 Implement the core API, one-shot write requests, compare-and-set and the in-process writer time limit ([[adr:0026]], [[16-api#Core API]], [[16-api#Write requests]])
+- [ ] 15.7 Implement the index nested-loop join and the BFS path kernel ([[adr:0027]], [[14-planner-execution#Join selection]], [[14-planner-execution#Path evaluation]])
+- [ ] 15.8 Implement `functional` predicates and hyperedge literal attributes ([[adr:0028]], [[01-data-model#Statements]], [[08-hyperedges#Literal attributes]])
+- [ ] 15.9 Implement the set-valued `in_star` with ancestor recomputation on edge removal, and test a lattice of 40 stacked diamonds ([[adr:0029]], [[09-graphs#Nesting DAG]])
+- [ ] 15.10 In the spike's first week, measure redb crash-repair time at 10M and 100M statements and confirm whether redb allows a savepoint after writes ([[18-roadmap#Spike: engine bake-off]])
+- [ ] 15.11 (v1) Backward/Forward maintenance and the scope-aware vector index with RaBitQ, re-ranking and list splits ([[adr:0029]], [[adr:0030]], [[15-vector-index#Search modes]])
+- [ ] 15.12 Write a test per new scenario in `specs/term-identity`, `specs/statement-store`, `specs/named-graphs`, `specs/transactions` and `specs/hyperedges`, each annotated with its `@tg: verifies::` id

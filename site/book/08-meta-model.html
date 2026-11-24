@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The meta-model · graphlava mini book</title>
+<meta name="description" content="The last metagraph kind is the model itself, stored as data. In graphlava the schema, the hyperedge types, the shapes and the rules are statements in one graph, read by the planner and checked on writ">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="The meta-model">
+<meta property="og:description" content="The last metagraph kind is the model itself, stored as data. In graphlava the schema, the hyperedge types, the shapes and the rules are statements in one graph, read by the planner and checked on writ">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Chapter 8</p>
+<h1>The meta-model</h1>
+<p class="standfirst">The last metagraph kind is the model itself, stored as data. In graphlava the schema, the hyperedge types, the shapes and the rules are statements in one graph, read by the planner and checked on write.</p>
+
+<h2>Why store the schema as statements</h2>
+<p>Chapter 3 called a system <em>homoiconic</em> when data, schema and rules share one representation. Three practical things follow:</p>
+<ul>
+  <li><strong>One transaction.</strong> Adding a role to a hyperedge type and writing the first hyperedge that uses it can commit together.</li>
+  <li><strong>One query language.</strong> "Which predicates are multi?" and "which rules read <code>:worksAt</code>?" are ordinary queries.</li>
+  <li><strong>One set of tools.</strong> Export, backup and inspection treat the schema like any other data.</li>
+</ul>
+<p>The price is validation. A write to the schema can make existing data invalid, so schema writes get checked harder than data writes.</p>
+
+<h2>The system graph</h2>
+<p>graphlava's spec puts every meta-model statement in the <strong>system graph</strong>, a graph with a fixed ID that is created with the file, next to the default graph. Its IRIs use a reserved namespace; the recommended choice is a URN namespace such as <code>urn:meta-core:</code> (renamed with the project), and the decision is still open.</p>
+<p>Three parts of the engine read it:</p>
+<div class="tablewrap"><table>
+  <tr><th>Meta-model entry</th><th>Declares</th><th>Read by</th></tr>
+  <tr><td>predicate declaration</td><td><code>multi</code> or <code>functional</code> flag, value index, on-demand orderings, datatype</td><td>write path, planner</td></tr>
+  <tr><td>hyperedge type</td><td>arity, role names, role ranges, fixed width; literal attributes, stored as inline properties of the hyperedge</td><td>write path, planner</td></tr>
+  <tr><td>class and label</td><td>class IRIs used as Cypher labels</td><td>Cypher front end (v1)</td></tr>
+  <tr><td>shape</td><td>constraints checked at commit (optional)</td><td>write path</td></tr>
+  <tr><td>rule</td><td>Datalog rule text, <code>@materialized</code> or <code>@on_demand</code></td><td>rule engine</td></tr>
+  <tr><td>index declaration</td><td>value indexes, on-demand orderings, vector indexes</td><td>planner, write path</td></tr>
+</table></div>
+
+<h2>The running example's schema</h2>
+<p>The spec fixes <em>what</em> each entry declares. It does not yet fix how the statements are spelled. The sketch below shows the content, not final syntax:</p>
+<pre><code><span class="c"># sketch, syntax not final: system namespace written as sys:</span>
+GRAPH sys:system {
+  :worksAt    a sys:Predicate ; sys:functional true .   <span class="c"># one employer: set keeps the ID</span>
+  :met        a sys:Predicate ; sys:multi true .        <span class="c"># chapter 6: several meetings</span>
+  :confidence a sys:Predicate ; sys:datatype xsd:decimal .
+
+  :Meeting a sys:HyperedgeType ;
+    sys:role [ sys:iri :agent  ; sys:card "one" ; sys:index 0 ] ,
+             [ sys:iri :target ; sys:card "one" ; sys:index 1 ] ,
+             [ sys:iri :topic  ; sys:card "one" ; sys:index 2 ] ;
+    sys:attribute [ sys:iri :when ; sys:datatype xsd:date ] .   <span class="c"># a property of e, not a role</span>
+
+  :colleague a sys:Rule ; sys:mode "on_demand" ;
+    sys:text "colleague(?x, ?y) :- :worksAt(?x, ?o), :worksAt(?y, ?o), ?x != ?y ." .
+}</code></pre>
+<p>Whatever the final spelling, each line is a statement and each statement has an ID. So the meta-model can carry annotations too: who added the <code>:Meeting</code> type, and why.</p>
+
+<h2>Validation before commit</h2>
+<p>A write to the system graph is validated before commit, against both the rest of the schema and the data. The spec lists the rejecting cases:</p>
+<div class="tablewrap"><table>
+  <tr><th>Change</th><th>Rejected when</th></tr>
+  <tr><td>Make a predicate <code>multi</code></td><td>a hyperedge type or rule depends on it being single</td></tr>
+  <tr><td>Make a predicate <code>functional</code></td><td>any subject already has two objects for it</td></tr>
+  <tr><td>Shrink a hyperedge type's arity</td><td>records of that type exist</td></tr>
+  <tr><td>Add or change a rule</td><td>the program fails stratification (negation or aggregation inside a recursive cycle)</td></tr>
+</table></div>
+<p>Some changes are allowed but expensive. Switching a predicate between single and <code>multi</code> rewrites its ordering entries, because the two use different key shapes. Removing a role from a hyperedge type, or changing its cardinality, rewrites all records of that type as an online migration. Adding an optional role rewrites nothing: missing slots read as null.</p>
+<p>Like every write, a failed validation aborts the whole transaction and leaves no partial state.</p>
+
+<h2>Shapes, and what is not in v0</h2>
+<p>A shape is a constraint checked at commit, such as "every <code>:worksAt</code> object is an <code>:Organization</code>". The spec keeps shapes to a small checked subset in v0. A full SHACL or OWL engine is a non-goal; reasoning profiles come as Datalog rule sets instead. RDFS and an OWL-RL subset are designed to ship as built-in rule sets, compiled ahead of time, under the same rules as user rules.</p>
+<div class="note">
+<p><strong>Shapes as holon boundaries.</strong> In a nested memory, a shape on a graph acts as a contract at the container's edge: what may enter <code>:session7</code>, what <code>:aliceMemory</code> promises to hold. <em>Metagraph for AI Agents</em> treats SHACL in exactly this role. In graphlava's v0, the contract is a small subset, checked on every commit.</p>
+</div>
+
+<h2>Rules live in the meta-model too</h2>
+<p>A Datalog program sent with a query keeps its rules for that query only. To keep rules, <code>define</code> stores them in the meta-model under their head IRIs. After that, SPARQL can call them through <code>SERVICE &lt;meta:datalog&gt;</code>, and later Datalog programs can use them by name. A stored rule is again a statement, so the question "which rules depend on <code>:worksAt</code>?" can be answered with a query, and the validator uses the same information to refuse a change that would break a rule.</p>
+<p>Chapter 9 covers the rules themselves.</p>
+
+<h2>What the meta-model buys in queries</h2>
+<p>The planner reads the meta-model to pick a plan before it reads data:</p>
+<ul>
+  <li>A pattern on a predicate known to be node-valued reads only the orderings; one known to be literal-valued reads only property records. Without that knowledge it must read both.</li>
+  <li>A star of role patterns on a fixed-arity hyperedge type can become one record scan (from v2).</li>
+  <li>A predicate with a declared value index can be looked up by value. That is also how meetings are found by their <code>:when</code> date, since literal attributes are not in the incidence index.</li>
+  <li>A <code>functional</code> predicate makes <code>(s, p)</code> a key, so the planner knows a pattern with both bound returns at most one row.</li>
+  <li>A rule's mode tells the planner whether to read a derived table or evaluate on demand.</li>
+</ul>
+
+<div class="note">
+<p><strong>In graphlava.</strong> The meta-model is a set of statements in the system graph: predicate declarations, hyperedge types, classes, shapes, rules and index declarations. Writes to it are validated against the data before commit. Its exact vocabulary and namespace are not final in the spec yet.</p>
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Storing the schema as statements gives one transaction, one query language and one toolset for schema and data.</li>
+  <li>The cost is validation: schema writes are checked against existing data and rules.</li>
+  <li>Declarations are not decoration: the planner uses them to read fewer sources and pick cheaper plans.</li>
+</ul>
+
+<div class="pager">
+  <a class="prev" href="07-containers.html">← Chapter 7</a>
+  <a href="index.html">Contents</a>
+  <a class="next" href="09-fold-unfold-reasoning.html">Chapter 9: Fold, unfold and reasoning →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

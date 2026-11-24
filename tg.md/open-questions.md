@@ -2,7 +2,7 @@
 type: OpenQuestion
 status: open
 owner: Volodia
-specs: ["adr:0011", "adr:0013", "adr:0014", "adr:0005", "adr:0006", "adr:0009", "adr:0010"]
+specs: ["adr:0011", "adr:0013", "adr:0014", "adr:0005", "adr:0006", "adr:0009", "adr:0010", "adr:0024", "adr:0029", "adr:0030"]
 ---
 # Open questions
 
@@ -37,7 +37,7 @@ RDF 1.2 allows several reifiers for one triple; meta-core makes the statement ID
 
 <option id="multiple-reifiers-per-triple-one" outcome="recommended">
 
-One reifier per statement (the ID). A second reifier IRI becomes an alias that maps to the same ID. Fast and simple; differs from RDF 1.2 when two reifiers need separate annotations.
+One reifier per statement (the ID). A second reifier IRI becomes an alias that maps to the same ID. Fast and simple; differs from RDF 1.2 when two reifiers need separate annotations. The common agent-memory case, different metadata per episode, is covered by annotating the promoted membership `<< X :in g >>` ([[09-graphs#Membership operations]]).
 
 </option>
 
@@ -134,79 +134,6 @@ Intern tags as dictionary IRIs: unbounded, but the 16-bit inline slot cannot hol
 
 </option>
 
-## Large literal storage
-
-How literals of many kilobytes or megabytes (documents, transcripts) are stored in the dictionary. Gate: v1.
-
-- blocks:: [[03-dictionary#Layout]]
-
-<option id="large-literal-storage-overflow" outcome="recommended">
-
-Values above a threshold (for example 4 KiB) move to an overflow table in chunks, keyed by a content hash for dedupe; `dict_fwd` keys on the hash.
-
-</option>
-
-<option id="large-literal-storage-inline" outcome="rejected">
-
-Store in place: large keys in `dict_fwd` bloat the tree and slow lookups.
-
-</option>
-
-<option id="large-literal-storage-external" outcome="deferred">
-
-Keep blobs outside the database file: breaks the single-file and portability rules.
-
-</option>
-
-## Inline double precision
-
-An `xsd:double` has 64 bits, the inline payload 56; only doubles with 8 zero low mantissa bits fit. Gate: v0.
-
-- blocks:: [[02-id-encoding#Inline literals]]
-
-<option id="inline-double-precision-subset" outcome="recommended">
-
-Inline only exact-fit doubles; others are dictionary literals with range filters served by value indexes (current spec).
-
-</option>
-
-<option id="inline-double-precision-float32" outcome="rejected">
-
-Store doubles as lossy 32/56-bit floats: violates value identity.
-
-</option>
-
-<option id="inline-double-precision-wide" outcome="rejected">
-
-Widen IDs to 128 bits: doubles every key.
-
-</option>
-
-## Literal predicate scan without value index
-
-A pattern `?x :age ?v` with no value index has no index to drive it, because literals are not in the orderings. Gate: v0.
-
-- blocks:: [[04-physical-layout#Tables]]
-- blocks:: [[14-planner-execution#Join selection]]
-
-<option id="literal-predicate-scan-without-value-index-pred-index" outcome="recommended">
-
-Keep a cheap per-predicate node list `(pred, node)` for inline properties, always on, so any literal predicate scan is a range; value order still needs a value index.
-
-</option>
-
-<option id="literal-predicate-scan-without-value-index-full-scan" outcome="rejected">
-
-Scan all property records: O(nodes) for any such pattern.
-
-</option>
-
-<option id="literal-predicate-scan-without-value-index-auto-only" outcome="deferred">
-
-Rely on auto value indexes: first queries are slow.
-
-</option>
-
 ## Large property records
 
 Nodes with very many literal properties spill to `props_ext`; the threshold and layout need measurement. Gate: v0.
@@ -280,33 +207,16 @@ One transaction: simple, but can be killed mid-way on iOS and blocks the writer.
 
 </option>
 
-## Visibility before durability
-
-With `relaxed` or `ordered`, readers can see a commit before it is durable, and a crash can then lose what they read. Gate: v0.
-
-- blocks:: [[06-transactions-durability#Durability levels]]
-
-<option id="visibility-before-durability-accept" outcome="recommended">
-
-Accept and document it; acknowledgment to the writer still waits for durability under `ordered`. Offer a `durable_snapshot` read option later.
-
-</option>
-
-<option id="visibility-before-durability-hide" outcome="rejected">
-
-Hide non-durable commits from readers: needs two snapshots and delays visibility for every reader.
-
-</option>
-
 ## Crash repair time on large files
 
-redb may repair allocator state after an unclean shutdown; the time on a 50+ GB file is unknown. Gate: v0.
+redb may repair allocator state after an unclean shutdown; the time on a 50+ GB file is unknown. On iOS and Android every kill by the OS is unclean, so this bounds app start time. Gate: first week of the engine spike.
 
 - blocks:: [[06-transactions-durability#Crash recovery]]
+- blocks:: [[18-roadmap#Spike: engine bake-off]]
 
 <option id="crash-repair-time-on-large-files-measure" outcome="recommended">
 
-Measure in the bake-off at 100M statements; if too slow, prefer clean shutdown hooks on mobile and document.
+Measure in the first week of the bake-off at 10M and 100M statements, on desktop and on one phone. If repair grows with file size beyond a few seconds at the mobile target size, choose between clean-shutdown hooks plus documentation and [[open-questions#Partitioned graph per file]] before any other v0 storage work.
 
 </option>
 
@@ -337,43 +247,6 @@ Cascade: deletes data the user may want to keep.
 <option id="delete-with-object-position-references-dangle" outcome="rejected">
 
 Keep with a dangling object: breaks the no-dangling rule of ADR-0006.
-
-</option>
-
-## Hyperedge role fillers that are literals
-
-Whether a hyperedge role can hold a literal (a `:when` date) rather than a node. Gate: v0.
-
-- blocks:: [[08-hyperedges#Record format]]
-
-<option id="hyperedge-role-fillers-that-are-literals-allow" outcome="recommended">
-
-Allow: the record stores the literal ID; the incidence index skips literal fillers and a value index covers lookups by value.
-
-</option>
-
-<option id="hyperedge-role-fillers-that-are-literals-forbid" outcome="rejected">
-
-Forbid: forces a separate property on the hyperedge for every literal role.
-
-</option>
-
-## Moving an item to another graph
-
-An item's home graph is fixed by its chunk; moving it needs a `gmem` override and a hidden home membership. Gate: v0.
-
-- blocks:: [[09-graphs#Extra membership]]
-- blocks:: [[08-hyperedges#Record format]]
-
-<option id="moving-an-item-to-another-graph-override" outcome="recommended">
-
-Record a move as `gmem` entry plus a `moved` tombstone for the home membership; scans subtract tombstones.
-
-</option>
-
-<option id="moving-an-item-to-another-graph-reallocate" outcome="rejected">
-
-Give the item a new ID in the target chunk: breaks the stable-ID rule (D5).
 
 </option>
 
@@ -602,29 +475,11 @@ Only through Datalog.
 
 </option>
 
-## Raw vector retention
-
-Whether raw vectors are kept next to PQ codes. Gate: v1.
-
-- blocks:: [[15-vector-index#IVF-PQ layout]]
-
-<option id="raw-vector-retention-optional" outcome="recommended">
-
-Off by default on mobile, on by default on desktop; needed for re-ranking and retraining.
-
-</option>
-
-<option id="raw-vector-retention-always" outcome="rejected">
-
-Always: doubles index size on phones.
-
-</option>
-
 ## Vector recall target
 
 The recall@10 and p99 latency targets that define done for the vector index. Gate: v1.
 
-- blocks:: [[15-vector-index#Training]]
+- blocks:: [[15-vector-index#Training and rebalancing]]
 
 <option id="vector-recall-target-measure-first" outcome="recommended">
 
@@ -671,7 +526,7 @@ Mark hot predicates manually only.
 
 ## Maintenance budget default
 
-The default DRed budget and whether it counts per rule or per transaction. Gate: v1.
+The default maintenance budget (Backward/Forward and counting) and whether it counts per rule or per transaction. Gate: v1.
 
 - blocks:: [[13-datalog#Materialized maintenance]]
 
@@ -774,5 +629,42 @@ Unix socket with file permissions plus a bearer token for TCP; OIDC later.
 <option id="server-authentication-none" outcome="rejected">
 
 No authentication: unsafe outside localhost.
+
+</option>
+
+## Partitioned graph per file
+
+Whether a partitioned graph may live in its own redb file instead of its own tables in the shared file. Gate: v1.
+
+- blocks:: [[09-graphs#Partitioned graphs]]
+- blocks:: [[adr:0002]]
+
+<option id="partitioned-graph-per-file-tables" outcome="recommended">
+
+Keep partitions as tables in one file (current spec) unless the spike shows crash repair or writer contention that grows with file size. One file keeps cross-graph transactions atomic.
+
+</option>
+
+<option id="partitioned-graph-per-file-files" outcome="deferred">
+
+One redb file per partitioned graph (tenant or agent): independent crash repair, drop by unlinking the file, and one writer per file. A transaction that spans files loses atomicity unless a commit protocol is added; scopes that span files union several engines.
+
+</option>
+
+## Exact search threshold
+
+The candidate-count × dimension crossover below which the vector operator searches exactly instead of through IVF lists. Gate: v1.
+
+- blocks:: [[15-vector-index#Search modes]]
+
+<option id="exact-search-threshold-measure" outcome="recommended">
+
+Start at 2 × 10^6 and set it from [[17-benchmarks#Vector search recall and latency]] on desktop and mobile separately.
+
+</option>
+
+<option id="exact-search-threshold-fixed" outcome="rejected">
+
+A fixed candidate count independent of dimension: wrong by a factor of two between 384 and 768 dimensions.
 
 </option>

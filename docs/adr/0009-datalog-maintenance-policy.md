@@ -47,3 +47,5 @@ Planner must union base and derived sources and track per-rule staleness. Hot-pr
 ## More Information
 
 Resolves handover open question 8. Refines handover D10 and sections 6.6.
+
+Amended by [ADR-0029](0029-incremental-maintenance-algorithms.md) (2026-11-24): recursive materialised rules use Backward/Forward maintenance instead of DRed; the budget and stale fallback are unchanged.

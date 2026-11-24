@@ -24,9 +24,17 @@ _Avoid_: shard, tenant store
 A predicate declared to allow several statements with the same subject and object. All other predicates allow at most one.
 _Avoid_: multi-edge type, duplicate edge
 
+**Functional predicate**:
+A predicate declared to allow at most one object per subject. Writing a new object updates the existing statement in place, keeping its ID.
+_Avoid_: single-valued edge, property (that is an inline property)
+
 **Inline property**:
 A statement whose object is a literal, stored in its subject's property record instead of the orderings.
 _Avoid_: attribute, literal edge
+
+**Owned literal**:
+A long literal that belongs to one property slot or statement instead of being interned. It is deleted with its slot; equal texts in two slots are two owned literals that compare equal.
+_Avoid_: blob, large object
 
 **Promotion**:
 Moving an inline property into the orderings with its own statement ID when something annotates it.
@@ -51,3 +59,11 @@ _Avoid_: range, page, segment
 **Durability level**:
 How strongly a transaction is guaranteed to survive a crash at the moment it is acknowledged: `sync`, `ordered` or `relaxed`.
 _Avoid_: fsync mode, consistency level
+
+**Batch**:
+The write requests the owner process runs inside one engine write transaction and commits together. A batch becomes visible when it commits.
+_Avoid_: group (as a noun), bulk
+
+**Write request**:
+A complete write (SPARQL Update, Datalog program or list of core operations) that a client submits for the writer to run in one batch, without holding the writer between round trips.
+_Avoid_: session, remote transaction

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hypergraphs and Metagraphs in Statement Graphs: a graphlava mini book</title>
+<meta name="description" content="A short, practical path from binary edges to recursive metagraphs, and how to model each step with identified statements and in graphlava.">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Hypergraphs and Metagraphs in Statement Graphs">
+<meta property="og:description" content="A short, practical path from binary edges to recursive metagraphs, and how to model each step with identified statements and in graphlava.">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Mini book</p>
+<h1>Hypergraphs and Metagraphs in Statement Graphs</h1>
+<p class="byline">graphlava mini book · 11 short chapters · November 2026</p>
+<p class="standfirst">A short, practical path from binary edges to recursive metagraphs, and how to model each step with identified statements and in graphlava.</p>
+
+<h2>Who this is for</h2>
+<p>You build memory for agents, or a knowledge graph that has outgrown plain edges. You know what a triple is. You have hit at least one of these: a relation with more than two ends, a fact you need to qualify ("how sure are we?"), or a group of facts you need to treat as one thing.</p>
+<p>The book is short on purpose. Each chapter introduces one structure, shows how it is usually encoded, and then shows how a statement graph and graphlava hold it.</p>
+
+<h2>The ladder</h2>
+<p>Graph structures form a ladder. Each rung can express everything the rung below can, and more:</p>
+<pre><code>Binary graph  ⊂  Hypergraph  ⊂  Metagraph  ⊂  Recursive metagraph
+<span class="c">  two ends       many ends      edges are      metagraphs inside</span>
+<span class="c">                                vertices,      metagraphs, to any</span>
+<span class="c">                                vertices hold  depth</span>
+<span class="c">                                subgraphs</span></code></pre>
+<p>Every rung costs something: more structure to store, more cases for the query planner, more for a reader to understand. So the rule of the book is simple. <strong>Climb only as far as the problem needs.</strong> A binary edge that never needs a comment should stay a binary edge.</p>
+
+<div class="note">
+<p><strong>graphlava is at the design stage.</strong> The specifications, decision records and CI exist; the engine does not. Every graphlava example follows the specs in the repository (<code>tg.md/</code> and <code>docs/adr/</code>). Where a syntax is not specified yet, the example is marked <em>sketch, syntax not final</em>. In the specs the project still has its working name, <code>meta-core</code>.</p>
+</div>
+
+<h2>The running example</h2>
+<p>All chapters use one small agent memory. The prefix <code>:</code> stands for <code>&lt;http://example.org/&gt;</code>. Three people, <code>:alice</code>, <code>:bob</code> and <code>:carol</code>, and a company, <code>:acme</code>. The agent believes <code>:alice :worksAt :acme</code>, with a confidence of 0.9, learned in conversation <code>:chat12</code>. Alice met Bob about <code>:pricing</code> on 2026-11-20: one meeting with three roles (agent, target, topic) and a date, which we call <code>e1</code>. What the agent learned in that conversation sits in an episode graph <code>:session7</code>, nested in <code>:aliceMemory</code>, nested in <code>:agentMemory</code>. A Datalog rule derives who are colleagues from two <code>:worksAt</code> facts.</p>
+
+<h2>Contents</h2>
+<ol class="toc">
+  <li><a href="01-beyond-edges.html">1. Graphs, and where they stop</a><span>Binary edges, a meeting of three people, and the four signs that you have hit the hypergraph wall.</span></li>
+  <li><a href="02-hypergraphs.html">2. Hypergraphs</a><span>Edges with many ends: definitions, direction, the incidence matrix, and the encodings that keep or lose the grouping.</span></li>
+  <li><a href="03-metagraphs.html">3. Metagraphs</a><span>Edges that are vertices and vertices that hold subgraphs: Basu and Blanning, Gapanyuk, Goertzel's fold and unfold.</span></li>
+  <li><a href="04-statement-graphs.html">4. Statement graphs</a><span>One identified (s, p, o) as the common substrate, its images for RDF and property graphs, and graphlava's single ID space.</span></li>
+  <li><a href="05-modeling-hyperedges.html">5. Modeling hyperedges</a><span>Three ways to store a meeting: role statements, graphlava's hyperedge record, and tiramemsu's choices.</span></li>
+  <li><a href="06-statements-about-statements.html">6. Statements about statements</a><span>Annotations, reifiers, inline properties and promotion, cascade delete, and the epistemic layer.</span></li>
+  <li><a href="07-containers.html">7. Containers: named and nested graphs</a><span>Vertices that hold subgraphs: membership, scope, the nesting DAG, and edges as containers.</span></li>
+  <li><a href="08-meta-model.html">8. The meta-model</a><span>Schema, hyperedge types, shapes and rules stored as statements in the system graph.</span></li>
+  <li><a href="09-fold-unfold-reasoning.html">9. Fold, unfold and reasoning</a><span>Switching levels of detail and deriving facts with Datalog over a metagraph.</span></li>
+  <li><a href="10-worked-example.html">10. A worked example</a><span>The whole agent memory, end to end, in one place.</span></li>
+  <li><a href="11-choosing.html">11. Choosing an encoding</a><span>A cheat sheet: which rung, which structure, and what it costs.</span></li>
+</ol>
+
+<h2>Further reading</h2>
+<p>The theory in chapters 1 to 3 is told at length in <em>Metagraph for AI Agents</em> by Volodymyr Pavlyshyn, which also covers relational, LadybugDB and TypeDB encodings, Semantic Spacetime and layered agent memory. For the sibling store that keeps every change with two clocks, see <a href="https://www.tiramemsu.com">tiramemsu</a>.</p>
+
+<div class="pager">
+  <a class="prev" href="../index.html">← Home</a>
+  <a class="next" href="01-beyond-edges.html">Chapter 1: Graphs, and where they stop →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

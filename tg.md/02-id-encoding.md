@@ -3,13 +3,14 @@ type: Requirement
 openspec: [term-identity]
 status: draft
 priority: must
-specs: ["adr:0011", "adr:0010", "adr:0006", "adr:0018"]
+specs: ["adr:0011", "adr:0021", "adr:0023", "adr:0010", "adr:0006", "adr:0018"]
 ---
 # ID encoding
 
 The 64-bit ID that names every term in meta-core: kind tag, chunked and sequential allocation, inline literals with value-preserving order, canonical forms, and how IDs are allocated.
 
 - follows_from:: [[adr:0011]]
+- follows_from:: [[adr:0021]]
 - follows_from:: [[adr:0010]]
 - depends_on:: [[01-data-model#Terms]] {strength: hard}
 
@@ -21,18 +22,19 @@ The layout is on disk in every index, so it is frozen by [[18-roadmap#Format fre
 
 ## Bit layout
 
-All IDs are little-endian `u64` values on disk and compare as unsigned integers in keys (stored big-endian inside composite keys, see [[04-physical-layout#Key byte order]]). The top 4 bits are the kind tag.
+All IDs are little-endian `u64` values on disk and compare as unsigned integers in keys (stored big-endian inside composite keys, see [[04-physical-layout#Key byte order]]). Bit 63 separates inline literals (`1`) from every other kind (`0`).
 
-| Bits | Chunked kinds (statement, graph, hyperedge) | Sequential kinds (IRI, blank node, dictionary literal) | Inline literal |
-| --- | --- | --- | --- |
-| 63..60 | kind tag | kind tag | `0x8` (inline literal tag) |
-| 59..56 | chunk number, high bits | sequence number, high bits | subtype |
-| 55..20 | chunk number (40 bits in all, bits 59..20) | sequence number (60 bits in all, bits 59..0) | payload, high bits |
-| 19..0 | offset in chunk (20 bits) | sequence number, low bits | payload, low bits (56 bits in all, bits 55..0) |
+| Bits | Chunked kinds (statement, graph, hyperedge) | Sequential kinds (IRI, blank node, dictionary literal) | Inline double | Other inline literal |
+| --- | --- | --- | --- | --- |
+| 63..62 | kind tag, high bits (`01`) | kind tag, high bits (`00`) | `10` | `11` |
+| 61..60 | kind tag, low bits | kind tag, low bits | payload, top bits | subtype, high bits |
+| 59..58 | chunk number, high bits | sequence number, high bits (bit 59: owned flag of a dictionary literal) | payload | subtype, low bits |
+| 57..20 | chunk number (40 bits in all, bits 59..20) | sequence number (60 bits in all, bits 59..0) | payload | payload, high bits |
+| 19..0 | offset in chunk (20 bits) | sequence number, low bits | payload (62 bits in all, bits 61..0) | payload, low bits (58 bits in all, bits 57..0) |
 
 <rule id="id-kind-tag" strength="must">
 
-The kind tag is bits 63..60. Value `0x0` is the null ID and is never allocated. Kinds are numbered so that every inline literal ID is greater than every non-literal ID.
+For a non-literal ID the kind tag is bits 63..60, with bit 63 clear. Every ID with bit 63 set (tags `0x8`..`0xF`) is an inline literal, so every inline literal ID is greater than every non-literal ID. Value `0x0` is the null ID and is never allocated.
 
 </rule>
 
@@ -41,13 +43,13 @@ The kind tag is bits 63..60. Value `0x0` is the null ID and is never allocated. 
 | `0x0` | null / unbound | never allocated |
 | `0x1` | IRI | sequential, [[03-dictionary]] |
 | `0x2` | blank node | sequential, [[03-dictionary]] |
-| `0x3` | dictionary literal | sequential, [[03-dictionary]] |
+| `0x3` | dictionary literal | sequential, [[03-dictionary]]; bit 59 set marks an owned literal ([[03-dictionary#Owned literals]]) |
 | `0x4` | statement | chunked, home graph |
 | `0x5` | graph | chunked, from the system graph |
 | `0x6` | hyperedge | chunked, home graph and type |
 | `0x7` | reserved | system objects (meta-model, rules) |
-| `0x8` | inline literal | value lives in the ID |
-| `0x9`..`0xF` | reserved | not allocated; a reader treats them as an error |
+| `0x8`..`0xB` | inline double (bits 63..62 = `10`) | value lives in the ID |
+| `0xC`..`0xF` | other inline literal (bits 63..62 = `11`) | value lives in the ID; unassigned subtypes are an error for a reader |
 
 <rule id="id-chunk-split" strength="must">
 
@@ -63,43 +65,45 @@ An allocated ID is never reused, even after its item is deleted ([[adr:0006]]). 
 
 ## Inline literals
 
-Tag `0x8`, then a 4-bit subtype, then a 56-bit payload. The payload encoding preserves value order, so an inline literal ID sorts by value within its subtype and a range filter on an indexed position is a key range.
+Inline literals use a prefix code ([[adr:0021]]): `10` in bits 63..62 is a double with a 62-bit payload; `11` is any other subtype (4 bits, 61..58) with a 58-bit payload. Every encoding preserves value order.
 
-| Subtype | Datatype | Payload (56 bits) | Order-preserving transform |
+An inline literal ID therefore sorts by value within its run, and a range filter on an indexed position is a key range.
+
+| Class, subtype | Datatype | Payload | Order-preserving transform |
 | --- | --- | --- | --- |
-| `0x0` | `xsd:boolean` | bit 0 | `false < true` |
-| `0x1` | `xsd:integer` and the derived integer types in range | signed 56-bit integer | add 2^55 (offset-binary) |
-| `0x2` | `xsd:double` that fits (see below) | 56 bits of the double | sign-flip transform, low 8 mantissa bits zero |
-| `0x3` | `xsd:decimal` with scale 0..9 and 15 digits | scale and digits | scale-normalised, sign-flipped |
-| `0x4` | `xsd:dateTime`, `xsd:dateTimeStamp` | UTC microseconds since 1970-01-01, signed | add 2^55 |
-| `0x5` | `xsd:date` | days since 1970-01-01, signed | add 2^55 |
-| `0x6` | `xsd:string` of 0..7 UTF-8 bytes | 7 bytes, zero padded on the right | lexicographic |
-| `0x7` | `rdf:langString` of 0..5 bytes | 5 bytes then a 16-bit language ID | lexicographic, then language |
-| `0x8`..`0xF` | reserved | | |
+| `10` | `xsd:double` in range (see below) | 62 bits: 9-bit rebiased exponent and 52-bit mantissa (61-bit magnitude), with the sign applied by the transform | non-negative: 2^61 + magnitude; negative: 2^61 − 1 − magnitude |
+| `11`, `0x0` | `xsd:integer` and the derived integer types in range | signed 58-bit integer | add 2^57 (offset-binary) |
+| `11`, `0x1` | `xsd:decimal` with at most 9 fractional digits and absolute value below 1.4 × 10^8 | value × 10^9 as a signed 58-bit integer | add 2^57 |
+| `11`, `0x2` | `xsd:boolean` | bit 0 | `false < true` |
+| `11`, `0x3` | `xsd:dateTime`, `xsd:dateTimeStamp` | UTC microseconds since 1970-01-01, signed 57 bits, then a has-timezone bit | add 2^56 to the instant, then append the bit |
+| `11`, `0x4` | `xsd:date` | days since 1970-01-01 of the written date, signed 57 bits, then a has-timezone bit | add 2^56, then append the bit |
+| `11`, `0x5` | `xsd:string` of 0..7 UTF-8 bytes | 7 bytes, zero padded on the right, in payload bits 57..2 | lexicographic |
+| `11`, `0x6` | `rdf:langString` of 0..5 bytes | 5 bytes then a 16-bit language ID, in payload bits 57..2 | lexicographic, then language |
+| `11`, `0x7`..`0xF` | reserved | | |
 
 <rule id="id-numeric-adjacent" strength="must">
 
-The numeric subtypes (integer `0x1`, double `0x2`, decimal `0x3`) are adjacent. A numeric filter such as `?v > 30` therefore compiles to one contiguous key interval that covers all three, and the result is ordered by subtype first and by value second. A query that needs a total numeric `ORDER BY` merges the three runs.
+The numeric runs are adjacent in key order: inline doubles (class `10`), then integers (`11`, `0x0`), then decimals (`11`, `0x1`). Each run is ordered by value, but the runs interleave in value, so a numeric filter such as `?v > 30` compiles to three key intervals, one per run, and only a scan of every numeric value is one interval. A total numeric `ORDER BY` merges the three runs. Dictionary numerics are reached through the value index ([[04-physical-layout#Tables#On-demand tables]]).
 
 </rule>
 
 <rule id="id-inline-range" strength="must">
 
-Every integer in [-2^55, 2^55 - 1], every date and dateTime in range, every string of at most 7 bytes and every `xsd:boolean` is stored inline, never in the dictionary. A value outside the inline range is a dictionary literal and keeps its exact lexical form and datatype.
+Every integer in [-2^57, 2^57 - 1], every decimal and double in its inline range, every date and dateTime in range (years about -313 to 4253), every string of at most 7 bytes and every `xsd:boolean` is stored inline, never in the dictionary. A value outside the inline range is a dictionary literal and keeps its exact lexical form and datatype.
 
 </rule>
 
-<rule id="id-double-inline" strength="should">
+<rule id="id-double-inline" strength="must">
 
-An `xsd:double` is stored inline only when its low 8 mantissa bits are zero, which holds for all integers up to 2^45 and for dyadic values such as 0.5 and 0.25. Any other double is a dictionary literal. Range filters on dictionary doubles are served by a value index ([[adr:0005]]), never by an ordering scan.
+An `xsd:double` is stored inline, exactly, when it is ±0, ±infinity, or a normal value whose unbiased exponent is in [-255, 254] (magnitudes from about 10^-77 to 10^77). Its magnitude field is the exponent plus 256 in 9 bits (0 for zero, 511 for infinity) followed by all 52 mantissa bits. NaN, subnormals and doubles outside the range are dictionary literals; range filters on them are served by the value index ([[adr:0022]]), never by an ordering scan.
 
 </rule>
 
 ### Why doubles need a rule
 
-A double has 64 bits but the inline payload has 56, so only a subset of doubles can be inline.
+A double has 64 bits but the inline payload has 62, so the 11-bit exponent is narrowed to 9 bits while the mantissa stays whole.
 
-[[adr:0011]] speaks of "sign-flipped IEEE doubles"; that holds only for the subset above. Most computed doubles (for example 0.1, or an embedding score) are dictionary literals, and filters on them need a value index.
+The earlier layout of [[adr:0011]] kept only doubles with eight zero low mantissa bits, which turned most computed doubles (0.1, embedding scores) into dictionary literals. [[adr:0021]] replaces it: only extreme magnitudes, subnormals and NaN leave the inline range.
 
 <example>
 
@@ -111,7 +115,7 @@ A double has 64 bits but the inline payload has 56, so only a subset of doubles 
 
 <output>
 
-`0.5` is inline and `0.1` is a dictionary literal. The filter runs as a scan of `:score` statements with a decode of `?v` for dictionary values; the planner creates a value index on `:score` once the lookup repeats.
+Both values are inline doubles. The plan reads the `plist` range of `:score`, then each node's property record, and compares `?v` with `0.2` as unsigned integers, with no decode. Once the lookup repeats, the planner creates a value index on `:score` and the filter becomes a key interval per numeric run.
 
 </output>
 
@@ -123,7 +127,7 @@ Literals are folded to one canonical form before interning, so equal values writ
 
 <rule id="id-canonical" strength="must">
 
-Every literal is canonicalised before interning, and the canonical form is the only form stored. `"01"^^xsd:integer` and `"1"^^xsd:integer` are the same ID. `-0.0` and `0.0` are distinct IDs (they are equal but not identical in XSD, and SPARQL `=` handles equality), `NaN` has one fixed bit pattern, `xsd:dateTime` values with a zone are converted to UTC, and `xsd:string` equals the same string with no datatype IRI. Lexical forms that differ only in leading zeros, plus signs or trailing decimal zeros are folded.
+Every literal is canonicalised before interning, and the canonical form is the only form stored. `"01"^^xsd:integer` and `"1"^^xsd:integer` are the same ID. `-0.0` and `0.0` are distinct IDs (they are equal but not identical in XSD, and SPARQL `=` handles equality), `NaN` has one fixed bit pattern, `xsd:dateTime` values with a zone are converted to UTC and keep only a has-timezone bit (the original offset is not stored, see [[11-sparql#Deviations]]), and `xsd:string` equals the same string with no datatype IRI. Lexical forms that differ only in leading zeros, plus signs or trailing decimal zeros are folded.
 
 </rule>
 
@@ -157,7 +161,7 @@ Graph IDs come from `graph` chunks owned by the system graph. The system graph h
 
 <rule id="id-sequential-alloc" strength="must">
 
-IRI, blank-node and dictionary-literal IDs come from three counters in `meta`, one per kind, each starting at 1.
+IRI, blank-node and dictionary-literal IDs come from three counters in `meta`, one per kind, each starting at 1. Owned dictionary literals ([[03-dictionary#Owned literals]]) take the next dictionary-literal number with bit 59 set, so the counter is shared and stays below 2^59.
 
 </rule>
 
@@ -184,7 +188,8 @@ IDs are plain integers and need no platform handling. The on-disk byte order is 
 Property, corpus and crash tests that prove the encoding round-trips, preserves order and survives a crash.
 
 - Round-trip property test: for 10^7 random values per subtype, `decode(encode(v)) == v`.
-- Order property test: for random pairs `a < b` of the same subtype, `encode(a) < encode(b)` as unsigned integers.
+- Order property test: for random pairs `a < b` of the same subtype, `encode(a) < encode(b)` as unsigned integers; for doubles the pairs include ±0, ±infinity and both ends of the exponent range.
+- Formal model: `MetaCore.Id` proves the integer round trip and order, the double sign-flip order (`encDbl_strictMono`) and the adjacency of the numeric runs (`double_before_int`, `int_before_decimal`).
 - Canonicalisation corpus: a table of lexical forms with the expected single canonical ID, run against the XSD datatype list.
 - Crash test: kill the writer after each step of a chunk lease and check that counters and `gchunk` agree after recovery.
 - Benchmark: [[17-benchmarks#Inline literal range scan]].
@@ -193,5 +198,4 @@ Property, corpus and crash tests that prove the encoding round-trips, preserves 
 
 Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
 
-- [[open-questions#Inline double precision]]: whether doubles outside the 56-bit subset stay dictionary literals.
 - [[open-questions#Language tag table]]: the size and growth policy of the 16-bit language ID table.

@@ -10,12 +10,19 @@ Typed n-ary hyperedges with named roles, stored once per edge and exposed to que
 The system SHALL store a hyperedge as one item with a type and a set of named roles, each filled by a node, and SHALL validate arity and roles against the type's definition in the meta-model.
 
 #### Scenario: Create a meeting hyperedge
-- **WHEN** type `:Meeting` declares roles `:agent`, `:target`, `:when` and a client creates a meeting with all three
-- **THEN** a hyperedge ID is returned and the three roles are readable
+- **WHEN** type `:Meeting` declares roles `:agent`, `:target` and the literal attribute `:when`, and a client creates a meeting with all three
+- **THEN** a hyperedge ID is returned and the two roles and the attribute are readable
 
 #### Scenario: Missing role rejected
 - **WHEN** a `:Meeting` is created without `:target` and the type marks it required
 - **THEN** the write fails
+
+### Requirement: Literal attributes of hyperedges
+The system SHALL store a literal value of a hyperedge, such as a time, as an inline property of the hyperedge node, never as a role filler.
+
+#### Scenario: Meeting time is an attribute
+- **WHEN** a meeting is created with `:when "2026-11-24T10:00:00Z"^^xsd:dateTime`
+- **THEN** `(e, :when, "2026-11-24T10:00:00Z"^^xsd:dateTime)` is returned by queries, and no incidence entry holds the time
 
 ### Requirement: Role triples are queryable
 The system SHALL expose each role filler as a triple `(edge, role, node)` to every query surface, without storing one statement per role.

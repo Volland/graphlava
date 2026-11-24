@@ -2,7 +2,7 @@
 type: OpenQuestion
 status: decided
 owner: Volodia
-specs: ["adr:0002", "adr:0003", "adr:0006", "adr:0004", "adr:0017", "adr:0007", "adr:0008", "adr:0018", "adr:0009", "adr:0016", "adr:0005", "adr:0012", "adr:0015", "adr:0010", "adr:0013", "adr:0014", "adr:0011"]
+specs: ["adr:0002", "adr:0003", "adr:0006", "adr:0004", "adr:0017", "adr:0007", "adr:0008", "adr:0018", "adr:0009", "adr:0016", "adr:0005", "adr:0012", "adr:0015", "adr:0010", "adr:0013", "adr:0014", "adr:0011", "adr:0021", "adr:0022", "adr:0023", "adr:0024", "adr:0025", "adr:0028", "adr:0030"]
 ---
 # Resolved questions
 
@@ -109,3 +109,45 @@ How Datalog is reached. Decided: standalone language plus SERVICE <meta:datalog>
 The 64-bit layout and literal encoding. Decided: 4-bit kind, 40+20 chunks, order-preserving inline literals.
 
 - resolved_by:: [[adr:0011]] {date: 2026-11-24}
+
+## Literal predicate scan without value index
+
+How `?x :p ?v` is driven without a value index. Decided: an always-on `plist (pred, node)` table that overwrites never touch.
+
+- resolved_by:: [[adr:0022]] {date: 2026-11-24}
+
+## Inline double precision
+
+Which doubles are inline. Decided: a prefix-coded layout gives doubles 62 payload bits, so every double with exponent in [-255, 254] is inline and exact.
+
+- resolved_by:: [[adr:0021]] {date: 2026-11-24}
+
+## Large literal storage
+
+Where long literals live and how they are reclaimed. Decided: literals over 256 bytes are owned by one slot, not interned, and deleted with it.
+
+- resolved_by:: [[adr:0023]] {date: 2026-11-24}
+
+## Visibility before durability
+
+Whether readers may see commits that a crash can lose. Decided: a batch is one engine transaction, so `sync` and `ordered` writes become visible only when durable.
+
+- resolved_by:: [[adr:0025]] {date: 2026-11-24}
+
+## Moving an item to another graph
+
+How an item changes graphs without a new ID. Decided: an extra membership plus a `moved` tombstone on the home membership; drop keeps shared items.
+
+- resolved_by:: [[adr:0024]] {date: 2026-11-24}
+
+## Hyperedge role fillers that are literals
+
+Whether a role can hold a literal. Decided: no; literal values are attributes stored as inline properties of the hyperedge.
+
+- resolved_by:: [[adr:0028]] {date: 2026-11-24}
+
+## Raw vector retention
+
+Whether raw vectors are kept. Decided: yes, in `f16` by default, for exact search over small scopes and re-ranking.
+
+- resolved_by:: [[adr:0030]] {date: 2026-11-24}

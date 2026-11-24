@@ -35,6 +35,24 @@ The system SHALL accept a durability level `sync`, `ordered` or `relaxed` per wr
 - **WHEN** a `relaxed` commit returns success and the process is killed before any later `sync` commit
 - **THEN** after reopening the database is consistent and either contains the whole transaction or none of it
 
+### Requirement: Batched commit
+The system SHALL run the write requests of one group-commit batch in one engine write transaction committed once, SHALL make `sync` and `ordered` writes visible to readers only when they are durable, and SHALL isolate a failing request so that the rest of its batch commits.
+
+#### Scenario: Ordered write is invisible until durable
+- **WHEN** an `ordered` write runs in an open batch and a reader starts before the batch commits
+- **THEN** the reader does not see the write, and a reader started after the acknowledgement does
+
+#### Scenario: Failed request does not affect its batch
+- **WHEN** three `ordered` requests share a batch and the second fails a compare-and-set
+- **THEN** the first and third commit and are acknowledged, and the second reports a conflict and changes nothing
+
+### Requirement: One-shot remote writes
+The system SHALL accept writes from other processes only as complete write requests and SHALL limit how long an in-process interactive write transaction holds the writer.
+
+#### Scenario: Slow in-process writer is cut off
+- **WHEN** an in-process write transaction stays open beyond its time limit
+- **THEN** its next call fails with a timeout, it is aborted, and queued requests proceed
+
 ### Requirement: Atomic transactions
 The system SHALL apply all effects of a transaction, including cascades, index updates and ID allocation, atomically.
 

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="t d">
+  <title id="t">graphlava</title>
+  <desc id="d">One diamond of baklava seen from above at an angle. Its sides show layers of pastry, like a stack of disks. On top, four nodes are joined to a pistachio in the centre: one hyperedge.</desc>
+  <g stroke="#3a2208" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+    <!-- side faces: layers of pastry -->
+    <path d="M28 96 L128 156 L128 212 L28 152 Z" fill="#c9852c"/>
+    <path d="M128 156 L228 96 L228 152 L128 212 Z" fill="#a96a1e"/>
+    <path d="M28 114 q12.5 1.5 25 15 t25 15 t25 15 t25 15 q12.5 -13.5 25 -15 t25 -15 t25 -15 t25 -15 M28 133 q12.5 1.5 25 15 t25 15 t25 15 t25 15 q12.5 -13.5 25 -15 t25 -15 t25 -15 t25 -15" fill="none" stroke-width="4"/>
+    <!-- top face -->
+    <path d="M128 36 L228 96 L128 156 L28 96 Z" fill="#f2b84b"/>
+    <!-- the hyperedge: one centre, four role edges -->
+    <path d="M128 96 L128 60 M128 96 L190 96 M128 96 L128 132 M128 96 L66 96" fill="none" stroke-width="5"/>
+    <g fill="#fff3d6" stroke-width="5">
+      <ellipse cx="128" cy="60" rx="11" ry="7.5"/>
+      <ellipse cx="190" cy="96" rx="11" ry="7.5"/>
+      <ellipse cx="128" cy="132" rx="11" ry="7.5"/>
+      <ellipse cx="66" cy="96" rx="11" ry="7.5"/>
+    </g>
+    <!-- the pistachio -->
+    <ellipse cx="128" cy="96" rx="20" ry="13" fill="#8cc43f"/>
+  </g>
+  <ellipse cx="122" cy="92" rx="7" ry="3.5" fill="#c6e88a"/>
+</svg>

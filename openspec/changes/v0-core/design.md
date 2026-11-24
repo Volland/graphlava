@@ -33,6 +33,8 @@ Each decision is an ADR; the specs link to it with `follows_from`.
 | Dictionary GC | background sweep | reference counts | [[adr:0016]] |
 | Membership IDs | lazy, on annotation | always | [[adr:0017]] |
 | File format | one portable format with feature flags | per-platform formats | [[adr:0018]] |
+| Verification | Lean 4 model + refinement replay + tests | TLA+ (deferred), Verus/Kani (deferred), tests only | [[adr:0019]] |
+| Benchmark gating | instruction counts per PR, statistical wall-clock nightly | wall-clock on PR runners; manual runs | [[adr:0020]] |
 
 ### Constraints
 
@@ -43,14 +45,31 @@ External rules the design must respect, written as `Constraint` sections in [[07
 - Android devices with 16 KB pages: binds native library alignment.
 - The W3C SPARQL 1.1 and 1.2 specifications: bind [[11-sparql#Conformance]].
 
+## Formal model and test strategy
+
+The invariants of term-identity, statement-store, named-graphs and transactions are stated and proved in Lean 4 in `formal/MetaCore/` and listed with their assumptions in [[20-proofs]]. The abstraction function maps the redb tables to `MetaCore.Store.Store`: every `stmt` row and every inline property becomes one `(id, triple)` entry, with unpromoted properties given no ID, and `meta.next` becomes `next`. The replay test checks `α (rust_op s) = model_op (α s)` per operation on oracle traces.
+
+| Capability | L0 Lean | L1 replay | L3/L4 E2E and crash |
+| --- | --- | --- | --- |
+| term-identity | `Id.*`, `Store.insert_next_mono`, `cascadeDelete_next` | yes | portable file, trace replay |
+| statement-store | `Store.insert_wf`, `update_*`, `cascadeDelete_correct` | yes | agent session, cascade and hyperedge guard |
+| named-graphs | `Nesting.addEdge_acyclic`, `scope_trans` | v0.1 | graph scope and nesting |
+| transactions | `Durability.durable_survives`, `relaxed_covered` | n/a | crash at every commit point, second process |
+| hyperedges | open (11.6) | v0.1 | cascade and hyperedge guard |
+| sparql-query | none: covered by W3C conformance (L5) | n/a | same answers on every surface |
+| datalog-query | open (PO-STRAT, PO-SEMINAIVE) | n/a | same answers on every surface |
+
 ## Risks / Trade-offs
 
 - [redb page size and overflow behaviour may raise write amplification] → measured in the bake-off; own pager stays possible behind the `Storage` trait ([[open-questions#Page size on redb]]).
 - [Three orderings make some cyclic queries slower] → on-demand orderings, measured in [[17-benchmarks#Ordering count comparison]].
 - [Transitive `GRAPH` departs from SPARQL] → direct compatibility mode for conformance tests.
-- [Most computed doubles are not inline] → value indexes; [[open-questions#Inline double precision]].
+- [Inline literal layout is frozen at v0] → prefix-coded layout with exact inline doubles decided before the freeze ([[adr:0021]]); its order theorems are in `MetaCore.Id`.
+- [Small write transactions copy B-tree paths in every touched tree] → one engine transaction per group-commit batch ([[adr:0025]]); bytes per request measured in the spike.
+- [redb crash repair on large files lengthens app start after an OS kill] → measured in the first spike week ([[open-questions#Crash repair time on large files]]).
 - [SPARQL 1.2 drafts change] → pinned draft ([[open-questions#SPARQL 1.2 draft pin]]).
-- [Format freeze locks early mistakes] → freeze only after the v0 benchmarks run ([[18-roadmap#Format freeze]]).
+- [Format freeze locks early mistakes] → freeze only after the v0 benchmarks run and the ID-encoding proof obligations close ([[18-roadmap#Format freeze]], [[20-proofs#Open obligations]]).
+- [Lean model drifts from the Rust code] → refinement replay on every PR; failing seeds kept as regressions ([[adr:0019]]).
 
 ## Migration Plan
 

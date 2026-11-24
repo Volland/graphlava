@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>graphlava and Neptune OneGraph: one statement model, two scales</title>
+<meta name="description" content="Amazon's OneGraph (1G) model puts RDF and property graphs on one statement model, and Neptune Analytics runs it as a managed service. What an embedded, single-file store like graphlava takes from it, and where it goes its own way.">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="graphlava and Neptune OneGraph">
+<meta property="og:description" content="What an embedded store takes from Amazon's 1G model, and where it goes its own way.">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/" aria-current="page">Articles</a>
+    <a href="../book/">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+  <p class="kicker">Article</p>
+  <h1>graphlava and Neptune OneGraph: one statement model, two scales</h1>
+  <p class="byline">graphlava articles · 24 November 2026</p>
+  <p class="standfirst">Amazon's OneGraph idea says you should not have to choose between RDF and property graphs: store statements, and let both views read them. Neptune Analytics runs that idea as a managed cloud service. graphlava is designed to run the same idea inside one process, in one file, on a laptop or a phone.</p>
+
+  <h2>The lock-in problem</h2>
+  <p>A team that picks RDF gets IRIs, named graphs, SPARQL and reasoning. A team that picks a property graph gets nodes and edges with properties, and Cypher or Gremlin. Moving between them later is expensive, because the two models disagree on basic things: what an edge is, whether an edge can have properties, whether a property can be talked about, and what identifies a node.</p>
+  <p>In 2023 Ora Lassila, Michael Schmidt and colleagues at Amazon described this as <em>graph model lock-in</em>, and proposed OneGraph (1G) as the way out. In 1G every piece of information is a statement with an identity. RDF triples, property-graph edges and property-graph properties are all statements, and a statement can carry further statements.</p>
+  <p>The same year, Ewout Gelling, George Fletcher and Michael Schmidt formalised the idea as <em>Statement Graphs</em> (full version at DASFAA 2024). They define images for RDF, RDF-star and property graphs, and a combined OneGraph image. Their prototype, the 1G Playground, keeps one statement graph and derives a TinkerPop store for Gremlin and an RDF4J store for SPARQL from it.</p>
+  <p>In August 2024 Neptune Analytics added openCypher queries over RDF data. The Neptune team's ISWC 2024 paper, <em>openCypher over RDF: Connecting Two Worlds</em>, describes how RDF and property-graph data are both loaded into OneGraph's internal model as <em>relationship statements</em> and <em>property statements</em>, and names statement graphs as directly inspired by OneGraph. How Neptune lays these out in memory or on disk is not public, and this article does not guess.</p>
+
+  <h2>The same unit</h2>
+  <p>graphlava (working name <code>meta-core</code> in its specs) starts from the same unit. A statement is a subject, predicate and object with a stable 64-bit ID, and that ID can be the subject of another statement. Its Cypher mapping, planned for v1, lines up with the 1G vocabulary almost term for term:</p>
+  <div class="tablewrap"><table>
+    <tr><th>Property-graph concept</th><th>OneGraph and Statement Graphs (as published)</th><th>graphlava (as specified)</th></tr>
+    <tr><td>Node</td><td>a resource that statements are about</td><td>any non-literal term: IRI, blank node, statement, graph or hyperedge; <code>id(n)</code> is its 64-bit ID</td></tr>
+    <tr><td>Relationship <code>-[r:T]-&gt;</code></td><td>a relationship statement</td><td>a statement <code>(a, T, b)</code> whose ID is <code>r</code></td></tr>
+    <tr><td>Node property <code>n.name</code></td><td>a property statement</td><td>an inline property <code>(n, :name, literal)</code></td></tr>
+    <tr><td>Relationship property <code>r.since</code></td><td>a property statement about a statement</td><td>an inline property of the statement <code>r</code></td></tr>
+    <tr><td>Label <code>:Person</code></td><td>a label statement</td><td><code>(n, rdf:type, :Person)</code>, so labels and RDF classes are the same thing</td></tr>
+  </table></div>
+  <p>The relationship/property split is the same in both. In graphlava it is a routing rule: a statement whose object is a node goes into the triple orderings, and a statement whose object is a literal is stored in its subject's property record. There is no per-property choice. A Cypher property is never exposed as a relationship, and a relationship always connects two nodes.</p>
+
+  <h2>Global names and local IDs</h2>
+  <p>The hardest problem 1G names is identity. RDF names things with global IRIs. A property graph names them with local IDs that mean nothing outside the database. A unified store has to let a SPARQL query and a Cypher query refer to the same edge.</p>
+  <p>graphlava's answer is that everything is an ID first. IRIs are interned in a dictionary and become IDs; statements, graphs and hyperedges are allocated IDs. Names are a projection. Two rules connect the two worlds:</p>
+  <ul>
+    <li>A Cypher relationship variable binds the statement ID, and <code>id(r)</code> returns it. That same value is the SPARQL 1.2 reifier of the statement.</li>
+    <li>The spec recommends returning reifiers to SPARQL clients as IRIs of the form <code>urn:meta-core:stmt:{id}</code>; the exact form is still open. A client can send that IRI back in a later query, and the parser maps it to the ID without a dictionary lookup.</li>
+  </ul>
+<pre><code><span class="c"># SPARQL: the reifier ?r is the statement ID</span>
+SELECT ?who ?c WHERE {
+  &lt;&lt; ?who :worksAt :acme ~ ?r &gt;&gt; .
+  ?r :confidence ?c .
+}
+
+<span class="c"># Cypher (v1): r binds the same ID</span>
+MATCH (a:Person {name: 'Alice'})-[r:WORKS_AT]-&gt;(c)
+WHERE r.confidence &gt; 0.8
+RETURN c.name, id(r)</code></pre>
+  <p>Some parts of the mapping are still open in the specs: how Cypher type names, labels and property keys map to IRIs, how far Cypher's null and comparison rules are emulated over RDF terms, and whether predicates created from Cypher default to allowing parallel edges. graphlava has not settled them yet.</p>
+
+  <h2>Sets and bags</h2>
+  <p>RDF has set semantics: a triple is there or it is not. Property graphs allow two parallel edges of the same type between the same nodes. The OneGraph image allows duplicate statements to cover both.</p>
+  <p>graphlava picks per predicate. By default there is at most one statement per <code>(s, p, o)</code>, and inserting an existing one returns its ID. A predicate declared <code>multi</code> in the meta-model allows parallel statements, each with its own ID. The default keeps index keys narrow and joins free of duplicate removal. The cost is a documented Cypher deviation: <code>CREATE</code> of an existing relationship on a non-multi predicate binds the existing one.</p>
+
+  <h2>Where graphlava adds physical structure</h2>
+  <p>A logical model leaves the layout open. graphlava has to fix one, and it fixes it for small, frequent writes and short reads, not for analytics over a large cluster.</p>
+  <h3>Identity only where it is used</h3>
+  <p>An inline property has no statement ID until something annotates it. Then it is promoted: it gets an ID and moves into the orderings. The same holds for hyperedge roles, graph memberships and derived facts. In 1G terms, every property statement is addressable; in graphlava, every property statement <em>can become</em> addressable, and pays for that only when it does.</p>
+  <h3>n-ary hyperedges</h3>
+  <p>1G and the statement-graph images are built from triples. graphlava adds a hyperedge: one record with a declared type and named roles, plus an incidence index per role filler. A meeting with an agent, a target and a topic is one record, not a node plus three statements. Its date is an inline property of the record, since roles hold only nodes (ADR 0028). Queries see role triples, produced from the record:</p>
+<pre><code>SELECT ?a ?t ?w WHERE { ?e a :Meeting ; :agent ?a ; :target ?t ; :when ?w }</code></pre>
+  <p>In Cypher a hyperedge is a node with role relationships, so both surfaces see the same structure.</p>
+  <h3>Nested graphs that cost nothing per member</h3>
+  <p>Each statement's ID is allocated from a chunk leased to one graph, so the home graph is read off the ID. Graphs nest as a DAG. <code>GRAPH :g</code> matches g and every graph under it; <code>GRAPH! :g</code> keeps standard SPARQL semantics. The planner turns a scope into an ID-range scan or an ID filter, so a query over a small episode graph is designed to cost in proportion to the episode. One statement can belong to several graphs: inserting it into a second graph adds a membership, and deleting it inside one graph removes only that membership (ADR 0024).</p>
+  <h3>Rules inside the engine</h3>
+  <p>SPARQL, Datalog and Cypher all lower to one extended-Datalog IR. Datalog is a query surface in its own right in v0, and SPARQL can call it through a reserved local service:</p>
+<pre><code><span class="c"># @materialized arrives in v1; in v0 the same rules run on demand</span>
+@prefix : &lt;http://example.org/&gt; .
+@materialized
+ancestor(?x, ?y) :- :parent(?x, ?y) .
+ancestor(?x, ?z) :- ancestor(?x, ?y), :parent(?y, ?z) .
+?- ancestor(:alice, ?who) .</code></pre>
+
+  <h2>Different scales on purpose</h2>
+  <div class="tablewrap"><table>
+    <tr><th></th><th>Neptune Analytics with OneGraph</th><th>graphlava</th></tr>
+    <tr><td>What it is</td><td>A managed AWS service, in production</td><td>An embedded Rust library, in design</td></tr>
+    <tr><td>Where it runs</td><td>AWS</td><td>Inside the application: Linux, macOS, Windows, iOS, Android</td></tr>
+    <tr><td>Storage</td><td>Not public</td><td>One redb file, one owner process</td></tr>
+    <tr><td>Unit</td><td>Relationship and property statements</td><td>Statements with 64-bit IDs; inline properties; hyperedge records</td></tr>
+    <tr><td>Languages</td><td>openCypher over RDF, among others</td><td>SPARQL 1.2 and Datalog (v0), Cypher subset (v1)</td></tr>
+    <tr><td>Duplicates</td><td>Allowed in the OneGraph image</td><td>Per predicate: set by default, <code>multi</code> on request</td></tr>
+    <tr><td>n-ary relations</td><td>Not in the published images</td><td>Native hyperedges</td></tr>
+    <tr><td>Graph nesting</td><td>Named graphs through membership statements; no nesting in the published images</td><td>DAG with transitive scope</td></tr>
+    <tr><td>Scale target</td><td>Graph analytics as a cloud service</td><td>10M to 1B statements per file on desktop, a few GB on phones (to be measured)</td></tr>
+  </table></div>
+  <p>Neptune is the stronger system for anything that needs a managed service, a shared graph for many users, large-scale analytics, or software that runs today. graphlava aims at a different place: one agent's memory, next to the agent, in the same process, with no network between them. Those are design goals, and every number in its specs still reads "to be measured".</p>
+
+  <h2>The takeaway</h2>
+  <p>OneGraph showed that one statement model can carry RDF and property graphs together, and Neptune showed it holds up in production. graphlava takes that model as given. Its own contribution is physical: IDs that survive updates, identity that appears only when something needs it, n-ary records, and nested graphs that are free to belong to. The model is shared. The scale and the trade-offs are not.</p>
+
+  <h2>References</h2>
+  <ol class="refs">
+    <li>O. Lassila, M. Schmidt et al. <em>The OneGraph Vision: Challenges of Breaking the Graph Model Lock-In</em>. Semantic Web Journal 14(1), 2023.</li>
+    <li>E. Gelling, G. Fletcher, M. Schmidt. <em>Bridging graph data models: RDF, RDF-star, and property graphs as directed acyclic graphs</em> [extended abstract]. arXiv:2304.13097, 2023.</li>
+    <li>E. Gelling, G. Fletcher, M. Schmidt. <em>Statement Graphs: Unifying the Graph Data Model Landscape</em>. DASFAA 2024, LNCS, pp. 364–376.</li>
+    <li>M. Schmidt et al. (Amazon Neptune team). <em>openCypher over RDF: Connecting Two Worlds</em>. ISWC 2024 Posters, Demos and Industry Tracks, CEUR-WS Vol. 3828.</li>
+    <li>AWS. <em>Amazon Neptune Analytics now supports openCypher queries over RDF graphs</em>. August 2024.</li>
+    <li>graphlava specifications: data model, hyperedges, named and nested graphs, SPARQL 1.2, Cypher subset; decision records 0004 and 0005. <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a>.</li>
+  </ol>
+
+  <div class="pager">
+    <a href="graphlava-and-tiramemsu.html">← graphlava and tiramemsu</a>
+    <a class="next" href="./">All articles →</a>
+  </div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

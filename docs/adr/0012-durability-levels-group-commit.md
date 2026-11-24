@@ -52,3 +52,5 @@ Many small transactions get durable acknowledgment at far fewer syncs; the publi
 ## More Information
 
 Refines handover D9 and section 9. Related: [ADR-0002](0002-redb-single-owner-process.md).
+
+Amended by [ADR-0025](0025-batched-group-commit.md) (2026-11-24): a batch runs in one engine write transaction and commits once, so `ordered` commits become visible only when durable.

@@ -57,3 +57,5 @@ Only 56 payload bits for inline values, so large integers and high-precision dec
 Refines handover section 3.1; the full bit tables belong in `docs/02-id-encoding.md`.
 
 Specification note (2026-11-24): an IEEE double has 64 bits and the inline payload has 56, so only doubles whose low 8 mantissa bits are zero are inline; others are dictionary literals. See `tg.md/02-id-encoding.md` rule `id-double-inline` and the open question "Inline double precision".
+
+Amended by [ADR-0021](0021-inline-literal-prefix-code.md) and [ADR-0023](0023-dictionary-mark-sweep-owned-literals.md) (2026-11-24): inline literals use a prefix code (`10` double with 62 payload bits, `11` plus 4-bit subtype and 58 payload bits); dictionary-literal sequence bit 59 marks an owned literal. The specification note above is superseded.

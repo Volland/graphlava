@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fold, unfold and reasoning · graphlava mini book</title>
+<meta name="description" content="A metagraph is useful when you can move between levels: see a meeting as one thing, then open it; see an episode as one node, then read what is in it; derive a new fact from several. This chapter does">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Fold, unfold and reasoning">
+<meta property="og:description" content="A metagraph is useful when you can move between levels: see a meeting as one thing, then open it; see an episode as one node, then read what is in it; derive a new fact from several. This chapter does">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Chapter 9</p>
+<h1>Fold, unfold and reasoning</h1>
+<p class="standfirst">A metagraph is useful when you can move between levels: see a meeting as one thing, then open it; see an episode as one node, then read what is in it; derive a new fact from several. This chapter does both with reads, writes and Datalog rules.</p>
+
+<h2>Fold and unfold, again</h2>
+<p>The two operations from chapter 3, in the sense used in <em>Metagraph for AI Agents</em> (Goertzel's paper treats fold and unfold more generally, as recursion schemes over metagraphs): <strong>fold</strong> collapses a subgraph into one vertex, <strong>unfold</strong> opens a vertex into its subgraph. In a statement graph there are three things that fold, and each already has an unfold.</p>
+<div class="tablewrap"><table>
+  <tr><th>Folded vertex</th><th>What it stands for</th><th>Unfold in graphlava</th></tr>
+  <tr><td>hyperedge <code>e1</code></td><td>its role triples and literal attributes</td><td><code>?e a :Meeting ; :agent ?a ; :target ?t ; :when ?w</code>, roles from one record, <code>:when</code> from its property record</td></tr>
+  <tr><td>graph <code>:session7</code></td><td>its statements</td><td><code>GRAPH! :session7 { ?s ?p ?o }</code></td></tr>
+  <tr><td>graph <code>:aliceMemory</code></td><td>its statements and nested graphs</td><td><code>GRAPH :aliceMemory { ?s ?p ?o }</code>, the whole scope</td></tr>
+</table></div>
+<p>The difference between <code>GRAPH!</code> and <code>GRAPH</code> is the difference between unfolding one level and unfolding all the way down.</p>
+
+<h2>Folding is a write that copies nothing</h2>
+<h3>Folding graphs</h3>
+<p>The cleanest fold works on whole graphs. Say the agent wants one view of everything about pricing. The episodes already exist; folding them is one nesting statement each:</p>
+<pre><code>(:session7,  :in, :pricingProject)
+(:session12, :in, :pricingProject)
+(:pricingProject, :summary, "Pricing talks with Bob, November 2026")</code></pre>
+<p>Nothing is copied. Every statement in both sessions is now in the scope of <code>:pricingProject</code>, and the episodes stay where they were. The fold has its own description, so the agent can reason at the folded level ("there is a pricing project") without reading the parts. Unfolding it is one scoped query:</p>
+<pre><code>SELECT ?s ?p ?o WHERE { GRAPH :pricingProject { ?s ?p ?o } }</code></pre>
+<p>Undoing the fold deletes the two nesting statements. The <code>in_star</code> closure is updated in the same transaction. It stores a set of pairs, not path counts (ADR 0029): removing a link recomputes the ancestors below it, so a session that is still reachable another way keeps its other ancestors.</p>
+<h3>Folding single statements</h3>
+<p>To fold a few statements out of a larger graph, give each an extra membership in the new graph: one <code>gmem</code> entry per statement, no copy, and the statement keeps its ID and annotations. Since ADR 0024 this is plain SPARQL: inserting an existing triple into another graph adds a membership instead of a second statement.</p>
+<pre><code><span class="c"># fold every statement tagged as being about pricing into :pricingFacts</span>
+INSERT { GRAPH :pricingFacts { ?s ?p ?o } }
+WHERE  { &lt;&lt; ?s ?p ?o ~ ?id &gt;&gt; . ?id :topic :pricing }</code></pre>
+<p>Unfolding back is a <code>DELETE</code> inside <code>GRAPH :pricingFacts</code>: it removes only that membership, and the statements stay in their own episodes.</p>
+
+<h2>Datalog sees the metagraph</h2>
+<p>graphlava's Datalog uses Nemo's syntax, and it sees the same relations SPARQL sees. Besides <code>:p(?x, ?y)</code> as shorthand for a triple, a program can use the store relations directly:</p>
+<div class="tablewrap"><table>
+  <tr><th>Relation</th><th>Columns</th><th>Metagraph kind</th></tr>
+  <tr><td><code>triple(?s, ?p, ?o, ?id)</code></td><td>a statement and its ID</td><td>edges as vertices</td></tr>
+  <tr><td><code>prop(?n, ?p, ?v, ?id)</code></td><td>an inline property; ID or 0 if not promoted</td><td>literal annotations</td></tr>
+  <tr><td><code>role(?e, ?r, ?n)</code></td><td>a hyperedge role filler</td><td>hyperedges</td></tr>
+  <tr><td><code>in(?x, ?g)</code></td><td>direct membership</td><td>containers</td></tr>
+  <tr><td><code>in_star(?x, ?g)</code></td><td>membership in the scope</td><td>nested containers</td></tr>
+</table></div>
+
+<h3>The running example's rule</h3>
+<pre><code>@prefix : &lt;http://example.org/&gt; .
+colleague(?x, ?y) :- :worksAt(?x, ?o), :worksAt(?y, ?o), ?x != ?y .
+?- colleague(:alice, ?who) .</code></pre>
+<p>With <code>:alice</code> bound, the magic-sets rewrite starts the evaluation from Alice's employers only, instead of computing every colleague pair and filtering.</p>
+
+<h3>Rules over every layer</h3>
+<pre><code><span class="c"># a fact counts as known if it has a confidence above 0.8</span>
+known(?s, ?o) :- triple(?s, :worksAt, ?o, ?id), prop(?id, :confidence, ?c, ?pid), ?c &gt; 0.8 .
+
+<span class="c"># who met whom, read straight from hyperedge roles</span>
+met(?a, ?b) :- role(?e, :agent, ?a), role(?e, :target, ?b) .
+
+<span class="c"># only facts that sit somewhere in Alice's memory</span>
+remembered(?s, ?o) :- triple(?s, :worksAt, ?o, ?id), in_star(?id, :aliceMemory) .
+
+<span class="c"># how many meetings each person called</span>
+called(?a, #count(?e)) :- role(?e, :agent, ?a) .
+
+<span class="c"># people Alice met but has no colleague link with (stratified negation)</span>
+outside(?b) :- met(:alice, ?b), ~colleague(:alice, ?b) .</code></pre>
+<p>Each rule mixes structure from different chapters: annotations (chapter 6), hyperedges (chapter 5), containers (chapter 7). Negation and aggregation must be stratified: a rule may not depend on its own negation or aggregate through a cycle. A program that breaks this is rejected with the cycle named.</p>
+
+<h3>From SPARQL</h3>
+<p>A SPARQL query can call rules through a local service. Variables bound outside are passed in, so magic sets apply here too:</p>
+<pre><code>PREFIX : &lt;http://example.org/&gt;
+SELECT ?who WHERE {
+  SERVICE &lt;meta:datalog&gt; {
+    """ colleague(?x, ?y) :- :worksAt(?x, ?o), :worksAt(?y, ?o), ?x != ?y . """
+    :alice :colleague ?who
+  }
+}</code></pre>
+<p>The service sees the same snapshot as the outer query. Inline rules are compiled for this query only; rules stored with <code>define</code> (chapter 8) can be called by their head IRI without the program text.</p>
+
+<h2>On demand or materialized</h2>
+<div class="tablewrap"><table>
+  <tr><th>Mode</th><th>How it runs</th><th>When</th></tr>
+  <tr><td><code>@on_demand</code> (default)</td><td>per query: magic sets from bound arguments, then semi-naive evaluation to a fixpoint; nothing stored</td><td>v0; any predicate</td></tr>
+  <tr><td><code>@materialized</code></td><td>kept current at commit: counting for non-recursive rules, Backward/Forward for recursive ones (a fact that may lose support is checked for another derivation before it is deleted), under a per-transaction budget</td><td>v1; only over stable, node-valued predicates</td></tr>
+</table></div>
+<p>The restriction on <code>@materialized</code> comes from the workload. Agent memory overwrites values constantly, and maintaining a rule over a hot predicate could stall every write. So a rule over inline properties, or over a predicate with a high overwrite rate, is rejected for materialization unless forced. If maintenance goes over budget in a transaction, the rule is marked <code>stale</code>, the commit goes through, queries fall back to on-demand evaluation, and a background job rebuilds it. A stale rule gives correct answers, more slowly.</p>
+<p>One rule is materialized from v0: <code>in_star</code>, the graph closure behind every scoped query. Whether built-in rules are exempt from the v0 on-demand-only limit is an open question, with "exempt" recommended.</p>
+
+<h2>Derived facts are statements, lazily</h2>
+<p>A derived fact, such as <code>colleague(:alice, :bob)</code>, is visible as a statement but is not stored in the base orderings. Materialized results live in a separate derived table. Like the other virtual statements, a derived fact gets a statement ID only when something annotates it (ADR 0009). The agent can then say how it uses the conclusion, "Bob is a colleague, and I told Carol so", without derived data ever mixing with what was written directly.</p>
+<p>Base facts can also be asserted from a program; the recommended marker is <code>@assert</code>, and the exact syntax is still open.</p>
+
+<div class="note">
+<p><strong>In graphlava.</strong> Hyperedges, graphs and scopes are folds that come with their unfold. Graph-level folding is a nesting write that copies nothing. Datalog reads statements with IDs, properties, roles, membership and scope as relations. Rules run on demand by default; materialized rules (v1) are limited to stable predicates and run under a budget.</p>
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Fold by nesting or extra membership: no copies, no new IDs for the parts.</li>
+  <li><code>GRAPH!</code> unfolds one level; <code>GRAPH</code> unfolds the whole scope.</li>
+  <li>One rule can read annotations, roles and containers together.</li>
+  <li>Derived facts become first-class only when you annotate them.</li>
+</ul>
+
+<div class="pager">
+  <a class="prev" href="08-meta-model.html">← Chapter 8</a>
+  <a href="index.html">Contents</a>
+  <a class="next" href="10-worked-example.html">Chapter 10: A worked example →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

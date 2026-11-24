@@ -3,7 +3,7 @@ type: Requirement
 openspec: [sparql-query]
 status: draft
 priority: must
-specs: ["adr:0014", "adr:0013", "adr:0007", "adr:0008", "adr:0004", "adr:0006", "adr:0017", "adr:0005"]
+specs: ["adr:0014", "adr:0013", "adr:0007", "adr:0008", "adr:0004", "adr:0006", "adr:0017", "adr:0005", "adr:0021", "adr:0024", "adr:0028"]
 ---
 # SPARQL 1.2
 
@@ -268,7 +268,7 @@ Deviation 4, Datalog. `SERVICE <meta:datalog>` is a reserved local service ([[11
 
 <rule id="sparql-dev-unique" strength="must">
 
-Deviation 5, set semantics and unique statements. Inserting an existing triple is a no-op, as in RDF; for `multi` predicates every `INSERT` creates a new statement, which RDF set semantics do not have.
+Deviation 5, set semantics and unique statements. Inserting an existing triple is a no-op, as in RDF, except that inserting it into another graph adds that graph's membership to the same statement ([[09-graphs#Membership operations]]). For `multi` predicates every `INSERT` creates a new statement, which RDF set semantics do not have. On a `functional` predicate, inserting `(s, p, o')` replaces the object of the existing `(s, p, o)` in place ([[01-data-model#Statements]]).
 
 </rule>
 
@@ -281,6 +281,18 @@ Deviation 6, cascade. `DELETE` of a statement also deletes its annotations, tran
 <rule id="sparql-dev-graph-default" strength="should">
 
 Deviation 7, graph of inserts. `INSERT DATA` without a `GRAPH` clause inserts into the connection's default write graph, which is the system default graph unless the client sets another. Standard SPARQL inserts into the default graph, which here is the union of all graphs and therefore not writable.
+
+</rule>
+
+<rule id="sparql-dev-graph-delete" strength="must">
+
+Deviation 8, one statement in several graphs. A triple in two named graphs is one statement with two memberships, not two quads. `DELETE DATA { GRAPH :g { … } }` removes the membership in `:g`; the statement and its annotations survive while another membership remains. `DROP GRAPH :g` deletes only the statements that have no other membership ([[09-graphs#Graph drop]]). Annotations are shared by all memberships; per-graph metadata is written on the membership reifier `<< ?s :in :g >>`.
+
+</rule>
+
+<rule id="sparql-dev-timezone" strength="must">
+
+Deviation 9, timezones. An `xsd:dateTime` or `xsd:date` keeps its instant and whether it had a timezone, not the original offset ([[02-id-encoding#Canonical forms]]). `TZ()` returns `"Z"` and `TIMEZONE()` returns `PT0S` for every zoned value, and `STR()` prints the value in UTC. Values without a timezone are unchanged.
 
 </rule>
 

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choosing an encoding · graphlava mini book</title>
+<meta name="description" content="A cheat sheet for the whole book: which rung of the ladder a problem needs, which structure holds it, what graphlava offers for it, and what it costs.">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Choosing an encoding">
+<meta property="og:description" content="A cheat sheet for the whole book: which rung of the ladder a problem needs, which structure holds it, what graphlava offers for it, and what it costs.">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Chapter 11</p>
+<h1>Choosing an encoding</h1>
+<p class="standfirst">A cheat sheet for the whole book: which rung of the ladder a problem needs, which structure holds it, what graphlava offers for it, and what it costs.</p>
+
+<h2>The ladder, with exits</h2>
+<pre><code>Binary graph  ⊂  Hypergraph  ⊂  Metagraph  ⊂  Recursive metagraph</code></pre>
+<div class="tablewrap"><table>
+  <tr><th>Rung</th><th>Climb to it when</th><th>Stay below it when</th></tr>
+  <tr><td>Binary graph</td><td>always the start</td><td>never: every model starts here</td></tr>
+  <tr><td>Hypergraph</td><td>a relation has three or more parts that must stay together</td><td>extra parts are just qualifiers of one binary fact</td></tr>
+  <tr><td>Metagraph</td><td>you must say things about relations, link relations, or group facts into named wholes</td><td>relations are never talked about</td></tr>
+  <tr><td>Recursive metagraph</td><td>layers on layers: provenance of provenance, episodes in memories in agents</td><td>one level of annotation or grouping is enough</td></tr>
+</table></div>
+
+<h2>Need → structure → graphlava</h2>
+<div class="tablewrap"><table>
+  <tr><th>You need</th><th>Structure</th><th>In graphlava</th><th>Cost (spec)</th><th>Chapter</th></tr>
+  <tr><td>A plain fact</td><td>binary statement</td><td><code>insert(s, p, o)</code></td><td>4 writes (node object) or 1 (literal)</td><td>4</td></tr>
+  <tr><td>A value that changes often</td><td>inline property</td><td>literal object, stored in the property record</td><td>1 write per overwrite</td><td>6</td></tr>
+  <tr><td>A single-valued link that changes, keeping its annotations</td><td>functional binary statement</td><td><code>functional</code> predicate: <code>set</code> updates in place</td><td>7 writes per change; ID and annotations kept</td><td>6, 8</td></tr>
+  <tr><td>How sure, where from</td><td>annotation</td><td><code>{| :confidence 0.9 ; :source :chat12 |}</code></td><td>as any statement; promotes the target if virtual</td><td>6</td></tr>
+  <tr><td>Who checked the source</td><td>annotation of an annotation</td><td>nested <code>{| … {| … |} |}</code></td><td>one more statement and one more join</td><td>6</td></tr>
+  <tr><td>The same fact several times</td><td>parallel statements</td><td><code>multi</code> predicate</td><td>wider keys for that predicate only</td><td>6, 8</td></tr>
+  <tr><td>A relation with fixed roles</td><td>role-labelled hyperedge</td><td>hyperedge type and record</td><td>1 record + 1 incidence key per node filler</td><td>5</td></tr>
+  <tr><td>A literal value of a relation, such as a meeting's date</td><td>attribute of the hyperedge</td><td>literal attribute: inline property of <code>e</code>, never a role</td><td>1 write; a value index to search by it</td><td>5</td></tr>
+  <tr><td>A relation whose roles vary</td><td>n-ary node + role statements</td><td>ordinary statements</td><td>4 writes per node-valued role</td><td>5</td></tr>
+  <tr><td>A remark on one role</td><td>reified role</td><td>annotate the role triple (promotion)</td><td>1 statement ID + <code>hedge_promo</code> key</td><td>5, 6</td></tr>
+  <tr><td>A relation between relations</td><td>edge as vertex</td><td>statement or hyperedge ID as subject or object</td><td>1 statement</td><td>4</td></tr>
+  <tr><td>A group of facts</td><td>container</td><td>named graph</td><td>0 bytes for home membership</td><td>7</td></tr>
+  <tr><td>A fact in two groups</td><td>extra membership</td><td><code>INSERT</code> the triple into the second graph: same statement, one more <code>gmem</code> entry</td><td>2 keys</td><td>7</td></tr>
+  <tr><td>Metadata per group (which episode said it, how sure)</td><td>annotated membership</td><td>annotate <code>&lt;&lt; X :in g &gt;&gt;</code> (promotion)</td><td>1 statement ID in <code>gmem</code></td><td>7</td></tr>
+  <tr><td>Groups in groups</td><td>nesting DAG</td><td><code>(child, :in, parent)</code>, transitive <code>GRAPH</code></td><td>closure update proportional to descendants × ancestors</td><td>7</td></tr>
+  <tr><td>An edge that holds a subgraph</td><td>edge as container</td><td>a graph linked to the edge</td><td>1 link statement; lifetime managed by you</td><td>7</td></tr>
+  <tr><td>A summary over existing parts</td><td>fold</td><td>nest graphs under a new graph</td><td>1 nesting statement per part; nothing copied</td><td>9</td></tr>
+  <tr><td>Facts that follow from facts</td><td>rule</td><td>Datalog, on demand (v0) or materialized (v1)</td><td>per query, or at commit under a budget</td><td>9</td></tr>
+  <tr><td>Rules about the schema</td><td>meta-model</td><td>statements in the system graph</td><td>validated before commit</td><td>8</td></tr>
+</table></div>
+<p>Write counts are base-table operations from the data model spec. Times are still to be measured.</p>
+
+<h2>Is a property graph enough?</h2>
+<p>Many projects reach for a metagraph too early. A labelled property graph is enough when all of these hold:</p>
+<ul>
+  <li>Relations are binary, or have a small fixed set of extra values.</li>
+  <li>Edge properties are values, never links to other nodes or edges.</li>
+  <li>Nobody asks "who said so?" or "how sure are we?" about an edge.</li>
+  <li>The data has one perspective: no episodes, sources or agents that disagree.</li>
+</ul>
+<p>You need a metagraph when any of these holds:</p>
+<ul>
+  <li>Relationships have relationships ("the meeting led to the price change").</li>
+  <li>The same fact is held with different confidence by different sources.</li>
+  <li>Knowledge is grouped into episodes, documents or projects that are themselves described.</li>
+  <li>Rules or the schema must be queried and changed like data.</li>
+</ul>
+<p>Agent memory usually meets the second list on the first day: every remembered fact has a source and a confidence.</p>
+
+<h2>graphlava or tiramemsu</h2>
+<p>Both are statement stores from the same idea. The choice is about time.</p>
+<div class="tablewrap"><table>
+  <tr><th>If you need</th><th>Choose</th></tr>
+  <tr><td>Current state only, many value overwrites, small fast transactions</td><td>graphlava</td></tr>
+  <tr><td>Native hyperedge records with typed roles</td><td>graphlava</td></tr>
+  <tr><td>Nested graphs with transitive scope</td><td>graphlava</td></tr>
+  <tr><td>"What did I believe last Tuesday?", corrections that keep the old version, nothing ever deleted</td><td>tiramemsu</td></tr>
+  <tr><td>Valid time as well as transaction time</td><td>tiramemsu</td></tr>
+  <tr><td>Something you can install today</td><td>tiramemsu (graphlava is at the design stage)</td></tr>
+</table></div>
+
+<h2>Five rules of thumb</h2>
+<ol>
+  <li><strong>Climb only as far as the problem needs.</strong> A binary fact that is never annotated costs the least, and graphlava is designed so that it pays for nothing else.</li>
+  <li><strong>Give a relation a type when its roles are fixed.</strong> The store can then check it and read it as one record.</li>
+  <li><strong>Annotate instead of encoding.</strong> A confidence belongs on the statement, not in a compound predicate or a side table.</li>
+  <li><strong>Point dependencies the way deletes flow.</strong> Annotations follow their subject into deletion. A reference from the object position does not cascade; the recommended option makes it block the delete unless <code>DETACH</code>.</li>
+  <li><strong>Group with graphs, not with properties.</strong> A <code>:context</code> value on every fact cannot be nested, scoped or described. A graph can.</li>
+</ol>
+
+<h2>Closing</h2>
+<p>The book started with a meeting that binary edges could not hold, and ended with a memory where a fact, its source, the source's checker, the meeting, its outcome, the episode and the rule that reads them all are statements in one ID space. Nothing in between needed a second data model. That is the case for statement graphs as the ground floor of a metagraph store: give every statement an identity, let identities stand where nodes stand, and the higher rungs of the ladder become ordinary writes.</p>
+<p>graphlava is designed around that idea, with the physical choices that agent memory asks for: IDs given lazily, overwrites that cost one write, hyperedges stored once, and scopes that cost in proportion to the graph. The specs are in the <a href="https://github.com/Volland/graphlava">repository</a>.</p>
+
+<div class="note">
+<p><strong>In graphlava.</strong> Every row of the table above maps to a part of the spec: statements and promotion (data model), hyperedge records (hyperedges), membership and scope (graphs), the system graph (meta-model) and Datalog (rules). One query core, SPARQL 1.2 and Datalog in v0, reads all of it.</p>
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Pick the lowest rung that holds the problem; graphlava charges for higher rungs only where they are used.</li>
+  <li>Fixed roles: hyperedge type. Remarks: annotation. Groups: graphs. Conclusions: rules. Schema: the system graph.</li>
+  <li>Choose tiramemsu when the memory must remember its own past.</li>
+</ul>
+
+<div class="pager">
+  <a class="prev" href="10-worked-example.html">← Chapter 10</a>
+  <a class="next" href="index.html">Back to Contents →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

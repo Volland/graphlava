@@ -23,7 +23,22 @@ schemas:
       metric: A number to record, with its unit.
       target: The pass line, or "to be measured" when no number is known yet.
     visualization: {color: "#22c55e", shape: round-tag}
+  Proof:
+    description: A machine-checked Lean 4 theorem (or an open proof obligation) about the formal model in formal/, stating which requirement or scenario it discharges and under which assumptions.
+    properties:
+      status: {values: [proved, partial, open], default: open, description: "proved: checked by lake build with no sorry; partial: proved under extra assumptions listed in the section; open: stated, not yet proved."}
+      module: {kind: text, description: The Lean module that holds the theorem, such as MetaCore.Store.}
+    elements:
+      assumption: A hypothesis the theorem needs that the implementation must guarantee, such as an invariant checked at runtime or a property covered by tests instead.
+    visualization: {color: "#a855f7", shape: diamond}
 edgeTypes:
+  proves:
+    description: A Lean theorem discharges this requirement or scenario for the formal model; the Rust code is tied to the model by the refinement tests.
+    from: Proof
+    to: [Requirement, Scenario]
+    properties:
+      theorem: {kind: text, description: Fully qualified Lean name, such as MetaCore.Store.update_wf.}
+      status: {values: [proved, partial, open], description: How much of the target the theorem covers.}
   follows_from:
     description: A requirement or concept exists because of this decision; the decision is its reason.
     from: [Requirement, Concept, Constraint]
@@ -51,4 +66,4 @@ edgeTypes:
 ---
 # meta-core Ontology Schema
 
-The project's own vocabulary on top of the code ontology: `OpenQuestion` and `Benchmark` types, and the edges `follows_from`, `resolved_by`, `blocks` and `measured_by`. They answer two questions the code ontology cannot: which design questions are still open and what they block, and which performance claims still need a measurement.
+The project's own vocabulary on top of the code ontology: `OpenQuestion`, `Benchmark` and `Proof` types, and the edges `follows_from`, `resolved_by`, `blocks`, `measured_by` and `proves`. They answer three questions the code ontology cannot: which design questions are still open and what they block, which performance claims still need a measurement, and which requirements are backed by a machine-checked proof.

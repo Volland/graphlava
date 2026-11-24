@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metagraphs · graphlava mini book</title>
+<meta name="description" content="A metagraph drops the line between vertex and edge. Edges can be vertices, vertices can hold subgraphs, and both can be nested to any depth. This chapter gives the definitions and the operations, and ">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Metagraphs">
+<meta property="og:description" content="A metagraph drops the line between vertex and edge. Edges can be vertices, vertices can hold subgraphs, and both can be nested to any depth. This chapter gives the definitions and the operations, and ">
+<meta property="og:image" content="https://graphlava.org/assets/logo-wordmark.svg">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="">graph<span>lava</span></a>
+  <nav class="menu">
+    <a href="../index.html#model">Model</a>
+    <a href="../articles/">Articles</a>
+    <a href="../book/" aria-current="page">Mini book</a>
+    <a href="https://github.com/Volland/graphlava">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="prose">
+<p class="kicker">Chapter 3</p>
+<h1>Metagraphs</h1>
+<p class="standfirst">A metagraph drops the line between vertex and edge. Edges can be vertices, vertices can hold subgraphs, and both can be nested to any depth. This chapter gives the definitions and the operations, and lists what a store must provide.</p>
+
+<h2>Three definitions, one idea</h2>
+<p>The word "metagraph" has been used for several related structures. Three are worth knowing.</p>
+<h3>Basu and Blanning</h3>
+<p>Basu and Blanning define a metagraph over a set of elements <code>X</code>, its generating set. A metaedge connects a <em>set</em> of elements to a <em>set</em> of elements:</p>
+<pre><code>M  = ⟨X, E⟩
+e  = ⟨V, W⟩     V ⊆ X  (invertex set),  W ⊆ X  (outvertex set)</code></pre>
+<p>So a metaedge is already a directed hyperedge from chapter 2. What Basu and Blanning add is set-to-set edges and <strong>metapaths</strong>: a path in a metagraph is a set of edges that together connect a source set to a target set, not a single chain. In their definition an edge is not itself an element of <code>X</code>. Letting edges act as elements is the later step, taken by Gapanyuk's metavertices below.</p>
+<h3>Gapanyuk's annotated metagraph</h3>
+<p>Gapanyuk adds <strong>metavertices</strong>: a vertex that contains vertices, edges and other metavertices. Metavertices and metaedges carry <strong>annotations</strong>, and an annotation may itself be a metagraph. Provenance, confidence and semantic type are all annotations in this view.</p>
+<h3>Goertzel's fold and unfold</h3>
+<p>Goertzel's paper <em>Folding and Unfolding on Metagraphs</em> treats fold and unfold as recursion schemes over metagraphs. This book uses the words in the simpler sense of <em>Metagraph for AI Agents</em>: two operations that move between levels of detail. <strong>Unfold</strong> opens a metavertex into the subgraph it stands for. <strong>Fold</strong> collapses a subgraph into one metavertex. A query or an algorithm can work at the folded level ("Alice had a meeting") and unfold only where it needs detail ("with whom, about what"). Chapter 9 shows both as ordinary reads and writes.</p>
+
+<h2>The two powers</h2>
+<p>Strip the definitions down and a metagraph has two powers that a hypergraph lacks.</p>
+<div class="tablewrap"><table>
+  <tr><th>Power</th><th>Meaning</th><th>In the running example</th></tr>
+  <tr><td><strong>Edges are vertices</strong></td><td>A relationship can be the subject or object of another relationship.</td><td>The fact <code>:alice :worksAt :acme</code> has a confidence of 0.9 and a source, <code>:chat12</code>.</td></tr>
+  <tr><td><strong>Vertices are containers</strong></td><td>A vertex can hold a subgraph and still be a vertex.</td><td><code>:session7</code> holds what the agent learned in one conversation, and is itself in <code>:aliceMemory</code>.</td></tr>
+</table></div>
+<p>Two more follow from combining them:</p>
+<ul>
+  <li><strong>Edges are containers.</strong> If an edge is a vertex, and a vertex can hold a subgraph, then an edge can hold a subgraph. The meeting <code>e1</code> can contain its minutes: the facts that were stated in it.</li>
+  <li><strong>The model is data.</strong> If anything can be a vertex, so can a schema element. "<code>:Meeting</code> has roles <code>:agent</code>, <code>:target</code> and <code>:topic</code>" is a statement like any other. A system whose schema, rules and data share one representation is called <em>homoiconic</em>. It can query and change its own schema with the same tools.</li>
+</ul>
+
+<h2>Recursive metagraphs</h2>
+<p>Apply the powers to their own results and you get a recursive metagraph. Each level is a vertex for the level above:</p>
+<pre><code><span class="c">level 0  a fact</span>
+s1 = (:alice, :worksAt, :acme)
+<span class="c">level 1  statements about the fact</span>
+s2 = (s1, :confidence, 0.9)
+s3 = (s1, :source, :chat12)
+<span class="c">level 2  a statement about the statement about the fact</span>
+s4 = (s3, :checkedBy, :carol)
+<span class="c">containers at every level</span>
+s1, s2, s3 ∈ :session7      :session7 ∈ :aliceMemory      :aliceMemory ∈ :agentMemory</code></pre>
+<p>The same structure repeats at every scale: a fact inside an episode, an episode inside a person's memory, that memory inside the agent's. The same queries and algorithms work at each level. This self-similarity is why one small set of operations is enough.</p>
+
+<h2>What breaks without each power</h2>
+<div class="tablewrap"><table>
+  <tr><th>Missing</th><th>What you cannot say</th><th>Usual workaround</th></tr>
+  <tr><td>Edges as vertices</td><td>How sure, where from, who said it</td><td>Reify by hand: a statement node with <code>rdf:subject</code>, <code>rdf:predicate</code>, <code>rdf:object</code>. Four extra triples per fact.</td></tr>
+  <tr><td>Vertices as containers</td><td>Which facts belong to one episode or document</td><td>A <code>:context</code> property on every fact, or one database per context.</td></tr>
+  <tr><td>Edges as containers</td><td>What happened inside a relationship</td><td>A stand-in node for the edge, which drifts when the edge changes.</td></tr>
+  <tr><td>Model as data</td><td>Change the schema in the same transaction as the data; reason over rules</td><td>A separate schema file and migration tool.</td></tr>
+</table></div>
+
+<h2>Why there are few metagraph databases</h2>
+<p>Most stores are built on one of four shapes, and none holds a metagraph natively. Relational tables are flat. Property graphs have binary edges whose properties hold values, not nodes or other edges. Classic RDF can only reify with four extra triples. Document stores have no graph queries. Each can approximate a metagraph, and the approximations are the subject of the <em>Metagraph for AI Agents</em> book. They share one move: give every relationship an identity, and let identities appear anywhere a vertex can.</p>
+<p>That move is the definition of a statement graph, the subject of chapter 4.</p>
+
+<div class="note">
+<p><strong>In graphlava.</strong> The data model spec names four metagraph kinds, each mapped onto statements and IDs:</p>
+<div class="tablewrap"><table>
+  <tr><th>Kind</th><th>Logical form</th><th>Chapter</th></tr>
+  <tr><td>statements about statements</td><td><code>(stmt#42, :confidence, 0.9)</code></td><td>6</td></tr>
+  <tr><td>n-ary hyperedge</td><td>role triples <code>(e, :role, node)</code>, one record</td><td>5</td></tr>
+  <tr><td>nested graph</td><td><code>(stmt, :in, g)</code>, <code>(g, :in, parent)</code></td><td>7</td></tr>
+  <tr><td>meta-model</td><td>schema, shapes and rules as statements in the system graph</td><td>8</td></tr>
+</table></div>
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>A metaedge links sets to sets; metavertices let a structure be an element of a larger one.</li>
+  <li>Two powers: edges are vertices, vertices are containers. Combined, they give edges as containers and a model stored as data.</li>
+  <li>Fold and unfold move between levels of detail. Recursion makes the same operations work at every level.</li>
+</ul>
+
+<div class="pager">
+  <a class="prev" href="02-hypergraphs.html">← Chapter 2</a>
+  <a href="index.html">Contents</a>
+  <a class="next" href="04-statement-graphs.html">Chapter 4: Statement graphs →</a>
+</div>
+</main>
+
+<footer class="bottom"><div class="wrap">
+  <span>graphlava · MIT OR Apache-2.0 · <a href="https://github.com/Volland/graphlava">github.com/Volland/graphlava</a></span>
+  <span><a href="../articles/">Articles</a> · <a href="../book/">Mini book</a> · <a href="https://www.tiramemsu.com">tiramemsu</a></span>
+</div></footer>
+</body>
+</html>

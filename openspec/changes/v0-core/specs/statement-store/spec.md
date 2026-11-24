@@ -24,12 +24,27 @@ The system SHALL hold at most one statement per `(s, p, o)` unless the predicate
 - **WHEN** `:transfer` is declared `multi` and `(:a, :transfer, :b)` is inserted twice
 - **THEN** two statements with different IDs exist
 
+### Requirement: Functional predicates update in place
+The system SHALL let the meta-model declare a predicate `functional`; writing `(s, p, o')` when `(s, p, o)` exists on a functional predicate SHALL update that statement's object in place and keep its ID and annotations.
+
+#### Scenario: Set on a functional predicate keeps annotations
+- **WHEN** `:currentLocation` is functional, `#42 = (:alice, :currentLocation, :paris)` carries `(#42, :source, :gps)`, and `(:alice, :currentLocation, :rome)` is written
+- **THEN** `#42` reads `(:alice, :currentLocation, :rome)` and the annotation still has subject `#42`
+
+#### Scenario: Compare-and-set update
+- **WHEN** a client updates `#42` to `:berlin` with expected object `:paris` after another client has changed it to `:rome`
+- **THEN** the update fails with a conflict and `#42` still reads `:rome`
+
 ### Requirement: Inline literal properties
 The system SHALL store statements whose object is a literal in their subject's property record and SHALL expose them to queries exactly like other statements.
 
 #### Scenario: Literal property is queryable as a triple
 - **WHEN** `(:alice, :age, 42)` is written
 - **THEN** a query for `?x :age ?v` returns `:alice` and `42`
+
+#### Scenario: Literal predicate scan reads only nodes that have the predicate
+- **WHEN** 10^6 nodes exist, 100 of them have `:age`, and a query asks for `?x :age ?v` with no value index
+- **THEN** the query reads 100 property records, found through the predicate's node list, not 10^6
 
 #### Scenario: Value lookup works without a declared index
 - **WHEN** a query asks for `?x :email "a@b.c"` with no value index declared

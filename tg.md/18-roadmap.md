@@ -17,7 +17,7 @@ Measurement-only work that gates v0: the bake-off harness behind a minimal `Stor
 
 - cites:: [[17-benchmarks#Engine bake-off]] {intent: usesMethodIn}
 
-Deliverables: `spikes/bakeoff/` with redb, libmdbx and Sanakirja adapters, the dataset generator, the agent-memory mix, and a results report. Exit: [[17-benchmarks#Engine bake-off]] and [[17-benchmarks#Ordering count comparison]] have run at 10M statements, and the redb choice ([[adr:0002]]) is confirmed or reopened.
+Deliverables: `spikes/bakeoff/` with redb, libmdbx and Sanakirja adapters, the dataset generator, the agent-memory mix, and a results report. Exit: [[17-benchmarks#Engine bake-off]] and [[17-benchmarks#Ordering count comparison]] have run at 10M statements, and the redb choice ([[adr:0002]]) is confirmed or reopened. The spike also answers, in its first week, three engine facts the design rests on: redb's repair time after an unclean shutdown at 10M and 100M statements ([[open-questions#Crash repair time on large files]]); bytes written per one-statement request with one engine transaction per request and per batch ([[adr:0025]]); and whether redb allows a savepoint in a transaction that has already written.
 
 ## v0
 
@@ -27,16 +27,16 @@ The embeddable core: storage, data model, graphs, hyperedges, the Datalog IR, an
 
 | Area | Scope | Spec |
 | --- | --- | --- |
-| Storage | `Storage` trait, redb adapter, v1 encoding (plain tables, SPO/POS/OSP with `id` values), `stmt`, `props`, value indexes, on-demand orderings | [[05-storage-trait#Trait API]], [[04-physical-layout#Encoding v1]] |
-| Terms | ID encoding, dictionary, canonical forms, background sweep | [[02-id-encoding#Bit layout]], [[03-dictionary#Sweep]] |
-| Data model | statements, inline properties, promotion, annotations, cascade delete | [[01-data-model#Statements]], [[06-transactions-durability#Cascade delete]] |
-| Graphs | chunk membership per `(graph, kind)`, `gmem`, transitive scope, DAG nesting with `in_star`, graph drop | [[09-graphs#Chunk membership]], [[09-graphs#Nesting DAG]] |
-| Hyperedges | record, incidence index, role triples (virtual) | [[08-hyperedges#Record format]] |
-| Transactions | `sync`, `ordered` (group commit), `relaxed` | [[06-transactions-durability#Durability levels]] |
-| IR and planner | shared IR, statistics, Leapfrog Triejoin, merge/hash joins, vectorized batches, plan cache | [[10-ir#Operators]], [[14-planner-execution#Join selection]] |
+| Storage | `Storage` trait, redb adapter, v1 encoding (plain tables, SPO/POS/OSP with `id` values), `stmt`, `props`, `plist`, value indexes with sort keys, on-demand orderings | [[05-storage-trait#Trait API]], [[04-physical-layout#Encoding v1]] |
+| Terms | ID encoding with the prefix-coded inline literals, dictionary with `dt` table and namespace cap, owned literals, canonical forms, mark-and-sweep | [[02-id-encoding#Bit layout]], [[03-dictionary#Sweep]] |
+| Data model | statements, `functional` and `multi` predicates, inline properties, promotion, annotations, cascade delete | [[01-data-model#Statements]], [[06-transactions-durability#Cascade delete]] |
+| Graphs | chunk membership per `(graph, kind)`, `gmem` with `moved` tombstones, membership operations, transitive scope, DAG nesting with a set-valued `in_star`, graph drop that keeps shared items | [[09-graphs#Chunk membership]], [[09-graphs#Nesting DAG]] |
+| Hyperedges | record, incidence index, role triples (virtual), literal attributes | [[08-hyperedges#Record format]] |
+| Transactions | `sync`, `ordered`, `relaxed` in one engine transaction per batch, request isolation | [[06-transactions-durability#Durability levels]] |
+| IR and planner | shared IR, statistics, index nested-loop joins, Leapfrog Triejoin, merge/hash joins, BFS path kernel, vectorized batches, plan cache | [[10-ir#Operators]], [[14-planner-execution#Join selection]] |
 | Datalog | **Datalog as a standalone query surface** (Nemo-compatible syntax), stratification, `@on_demand` rules (magic sets, semi-naive) | [[13-datalog#Surface syntax]], [[13-datalog#On-demand evaluation]] |
 | SPARQL | SPARQL 1.2 query and update, reifiers, transitive `GRAPH`, local `SERVICE <meta:datalog>`, W3C test suites | [[11-sparql#Scope]], [[11-sparql#Datalog service]], [[11-sparql#Conformance]] |
-| API | Rust API with `sparql()` and `datalog()` entry points, C FFI | [[16-api#Rust API]], [[16-api#C FFI]] |
+| API | Rust API with `sparql()` and `datalog()` entry points, core API, one-shot write requests with compare-and-set, C FFI | [[16-api#Rust API]], [[16-api#C FFI]] |
 | Platforms | builds and tests on Linux, macOS, Windows; iOS and Android build only | [[07-platforms#Windows]] |
 
 Exit: all v0 requirements implemented and verified; W3C SPARQL 1.1 suite passing in `direct` mode with listed skips; [[17-benchmarks#Inline literal range scan]], [[17-benchmarks#Durability commit latency]] and [[17-benchmarks#Dictionary sweep cost]] run; [[18-roadmap#Format freeze]] done.
@@ -50,8 +50,8 @@ Second surfaces and built-ins: Cypher subset, materialized rules, vector index, 
 | Area | Scope | Spec |
 | --- | --- | --- |
 | Cypher | Cypher/GQL subset over the same IR, multi predicates | [[12-cypher#Subset]] |
-| Datalog | `@materialized` rules: counting, DRed with budget, `stale` fallback, derived table | [[13-datalog#Materialized maintenance]] |
-| Vectors | IVF-PQ index and IR operator | [[15-vector-index#IVF-PQ layout]] |
+| Datalog | `@materialized` rules: counting, Backward/Forward with budget, `stale` fallback, derived table | [[13-datalog#Materialized maintenance]] |
+| Vectors | scope-aware exact search, IVF lists with RaBitQ codes and re-ranking, local list splits, IR operator | [[15-vector-index#IVF layout]] |
 | Server | `meta-core-server`: SPARQL Protocol, Datalog endpoint, local IPC socket | [[16-api#Server crate]] |
 | Federation | remote `SERVICE` via HTTP resolver | [[11-sparql#Datalog service]] |
 | Mobile | Swift and Kotlin bindings, suspend/resume, iOS extension IPC | [[16-api#Mobile bindings]] |

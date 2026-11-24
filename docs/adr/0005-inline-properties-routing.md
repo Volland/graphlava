@@ -50,3 +50,5 @@ Patterns with an unbound predicate must union `props` and the orderings. Auto-cr
 ## More Information
 
 Resolves handover open question 10. Refines handover D7 and section 3.4.
+
+Amended by [ADR-0022](0022-value-index-sort-keys.md) (2026-11-24): value indexes are one `propidx` table keyed `(pred, sort_key, node, value_id)`, and an always-on `plist` `(pred, node)` drives literal predicate scans.

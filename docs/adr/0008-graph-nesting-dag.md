@@ -50,3 +50,5 @@ Every `:in` insert pays a closure lookup and a closure update. Deleting an edge 
 ## More Information
 
 Refines [ADR-0003](0003-graph-scoping-hybrid.md) and [ADR-0007](0007-graph-scope-transitive-default.md).
+
+Amended by [ADR-0029](0029-incremental-maintenance-algorithms.md) (2026-11-24): `in_star` stores the closure as a set; edge removal recomputes ancestor sets instead of subtracting path counts.
