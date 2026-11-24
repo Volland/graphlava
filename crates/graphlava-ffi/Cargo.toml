@@ -1,0 +1,25 @@
+[package]
+name = "graphlava-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "C API of graphlava, an embedded metagraph database for agent memory (libgraphlava_ffi + graphlava.h)"
+readme = "README.md"
+homepage = "https://graphlava.org"
+documentation = "https://docs.rs/graphlava-ffi"
+keywords = ["graph-database", "ffi", "sparql", "metagraph", "c-api"]
+categories = ["database-implementations", "external-ffi-bindings"]
+
+[lib]
+name = "graphlava_ffi"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+graphlava = { version = "0.1.0-alpha.1", path = "../graphlava" }
+# `flock` on the iOS extension journal (src/journal.rs).
+libc = "0.2"
+
+[lints]
+workspace = true
