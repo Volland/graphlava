@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PREFIXES = { prefixes: { '': 'http://ex.org/' } };
@@ -38,4 +38,5 @@ export function runNode(source, { args = [], env = {}, onStdout } = {}) {
   });
 }
 
-export const INDEX = path.join(PKG, 'index.mjs');
+// A file URL, so it works as an import specifier on Windows too.
+export const INDEX = pathToFileURL(path.join(PKG, 'index.mjs')).href;

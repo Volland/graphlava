@@ -122,6 +122,7 @@ jobs:
       - name: 16 KB alignment of the AAR's libraries
         working-directory: bindings/kotlin
         run: |
+          mkdir -p build/aar
           unzip -o graphlava-android/build/outputs/aar/graphlava-android-release.aar 'jni/*' -d build/aar
           READELF="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" \
             scripts/check-16k-alignment.sh build/aar/jni/*/libgraphlava.so

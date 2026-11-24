@@ -1130,9 +1130,9 @@ impl Database {
         let res = if st.failed_from.is_some() {
             Err(Error::ReadOnly)
         } else {
-            std::fs::copy(inner.storage.path(), to.as_ref())
-                .map(|_| ())
-                .map_err(Error::from)
+            // Read through the open handle: on Windows the OS lock refuses
+            // a copy through any other handle.
+            inner.storage.copy_to(to.as_ref())
         };
         inner.release(&mut st, ticket);
         res

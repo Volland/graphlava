@@ -157,6 +157,10 @@ jobs:
         if: ${{ !matrix.container }}
         with:
           node-version: ${{ matrix.node }}
+      - name: Install bash in the Alpine container
+        if: ${{ matrix.container }}
+        shell: sh
+        run: apk add --no-cache bash
       - uses: actions/download-artifact@v4
         with:
           name: bindings-${{ matrix.name }}
@@ -172,8 +176,22 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/app" && cd "$RUNNER_TEMP/app"
           npm init -y > /dev/null
-          npm install --no-audit --no-fund "$RUNNER_TEMP"/pkgs/graphlava-node-${{ matrix.name }}-*.tgz "$RUNNER_TEMP"/pkgs/graphlava-node-0*.tgz
-          node "$GITHUB_WORKSPACE/bindings/node/test-support/smoke.mjs"
+          # The main package's optional dependency on the per-target package
+          # names a registry version; point it at the local tarball instead.
+          MAIN=$(ls "$RUNNER_TEMP"/pkgs/graphlava-node-[0-9]*.tgz) \
+          PLAT=$(ls "$RUNNER_TEMP"/pkgs/graphlava-node-${{ matrix.name }}-*.tgz) \
+          TARGET="@graphlava/node-${{ matrix.name }}" \
+          node -e '
+            const fs = require("fs");
+            const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            p.dependencies = { "@graphlava/node": "file:" + process.env.MAIN };
+            p.overrides = { [process.env.TARGET]: "file:" + process.env.PLAT };
+            fs.writeFileSync("package.json", JSON.stringify(p, null, 2));'
+          npm install --no-audit --no-fund
+          # Run from the app so `import` and `require` both resolve the
+          # installed package, not the repository copy.
+          cp "$GITHUB_WORKSPACE/bindings/node/test-support/smoke.mjs" .
+          node smoke.mjs
 
   bench:
     name: nightly Binding overhead (Node)

@@ -348,6 +348,10 @@ pub struct EngineOptions {
 /// releasing drops the handle and with it the OS file lock.
 pub struct RedbStorage {
     db: std::sync::RwLock<Option<redb::Database>>,
+    /// The backend under `db`, shared so a snapshot export can read the file
+    /// through the handle that holds the OS lock (on Windows, any other handle
+    /// is refused). Dropped together with `db` on release.
+    backend: std::sync::RwLock<Option<std::sync::Arc<dyn redb::StorageBackend>>>,
     path: std::path::PathBuf,
     opts: EngineOptions,
     reopens: std::sync::atomic::AtomicU64,
@@ -365,15 +369,20 @@ impl RedbStorage {
     /// Opens or creates the file. The OS lock is redb's `flock` / `LockFile`
     /// on the file, held for the life of the handle (rule `api-single-owner`).
     pub fn open(path: &Path, opts: &EngineOptions) -> Result<Self> {
+        let (db, backend) = Self::open_db(path, opts)?;
         Ok(RedbStorage {
-            db: std::sync::RwLock::new(Some(Self::open_db(path, opts)?)),
+            db: std::sync::RwLock::new(Some(db)),
+            backend: std::sync::RwLock::new(Some(backend)),
             path: path.to_path_buf(),
             opts: opts.clone(),
             reopens: std::sync::atomic::AtomicU64::new(0),
         })
     }
 
-    fn open_db(path: &Path, opts: &EngineOptions) -> Result<redb::Database> {
+    fn open_db(
+        path: &Path,
+        opts: &EngineOptions,
+    ) -> Result<(redb::Database, std::sync::Arc<dyn redb::StorageBackend>)> {
         let mut builder = redb::Builder::new();
         builder
             .set_cache_size(opts.cache_bytes)
@@ -385,13 +394,16 @@ impl RedbStorage {
             .truncate(false)
             .open(path)?;
         let backend = redb::backends::FileBackend::new(file).map_err(map_db)?;
-        match &opts.fault {
-            None => builder.create_with_backend(backend),
+        let shared: std::sync::Arc<dyn redb::StorageBackend> = match &opts.fault {
+            None => std::sync::Arc::new(backend),
             Some(plan) => {
-                builder.create_with_backend(super::fault::FaultBackend::new(backend, plan.clone()))
+                std::sync::Arc::new(super::fault::FaultBackend::new(backend, plan.clone()))
             }
-        }
-        .map_err(map_db)
+        };
+        let db = builder
+            .create_with_backend(SharedBackend(shared.clone()))
+            .map_err(map_db)?;
+        Ok((db, shared))
     }
 
     fn handle(&self) -> std::sync::RwLockReadGuard<'_, Option<redb::Database>> {
@@ -403,6 +415,13 @@ impl RedbStorage {
     pub fn release(&self) {
         let db = self.db.write().unwrap_or_else(|p| p.into_inner()).take();
         drop(db);
+        // The last reference: dropping it closes the file and its lock.
+        let backend = self
+            .backend
+            .write()
+            .unwrap_or_else(|p| p.into_inner())
+            .take();
+        drop(backend);
     }
 
     /// Opens the file again after [`RedbStorage::release`]; a no-op while the
@@ -410,7 +429,9 @@ impl RedbStorage {
     pub fn reacquire(&self) -> Result<()> {
         let mut g = self.db.write().unwrap_or_else(|p| p.into_inner());
         if g.is_none() {
-            *g = Some(Self::open_db(&self.path, &self.opts)?);
+            let (db, backend) = Self::open_db(&self.path, &self.opts)?;
+            *self.backend.write().unwrap_or_else(|p| p.into_inner()) = Some(backend);
+            *g = Some(db);
             self.reopens
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
@@ -430,6 +451,48 @@ impl RedbStorage {
     /// The database file.
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Copies the file, byte for byte, to `to` by reading through the open
+    /// backend. The caller keeps writers out and has made every commit
+    /// durable, so the file is quiescent.
+    pub fn copy_to(&self, to: &Path) -> Result<()> {
+        use std::io::Write;
+        const CHUNK: u64 = 4 << 20;
+        let g = self.backend.read().unwrap_or_else(|p| p.into_inner());
+        let backend = g.as_ref().ok_or_else(released)?;
+        let len = backend.len()?;
+        let mut out = std::fs::File::create(to)?;
+        let mut off = 0;
+        while off < len {
+            let n = CHUNK.min(len - off);
+            out.write_all(&backend.read(off, n as usize)?)?;
+            off += n;
+        }
+        out.sync_all()?;
+        Ok(())
+    }
+}
+
+/// A [`redb::StorageBackend`] shared between redb and [`RedbStorage::copy_to`].
+#[derive(Debug)]
+struct SharedBackend(std::sync::Arc<dyn redb::StorageBackend>);
+
+impl redb::StorageBackend for SharedBackend {
+    fn len(&self) -> std::result::Result<u64, std::io::Error> {
+        self.0.len()
+    }
+    fn read(&self, offset: u64, len: usize) -> std::result::Result<Vec<u8>, std::io::Error> {
+        self.0.read(offset, len)
+    }
+    fn set_len(&self, len: u64) -> std::result::Result<(), std::io::Error> {
+        self.0.set_len(len)
+    }
+    fn sync_data(&self, eventual: bool) -> std::result::Result<(), std::io::Error> {
+        self.0.sync_data(eventual)
+    }
+    fn write(&self, offset: u64, data: &[u8]) -> std::result::Result<(), std::io::Error> {
+        self.0.write(offset, data)
     }
 }
 

@@ -388,7 +388,15 @@ public final class ReadSnapshot {
 
     private func quads(_ call: (UnsafeMutablePointer<UInt64>?, Int, UnsafeMutablePointer<Int>) -> graphlava_status) throws -> [Quad] {
         let v = try fetch(width: 4, call)
-        return stride(from: 0, to: v.count, by: 4).map { Quad(s: v[$0], p: v[$0 + 1], o: v[$0 + 2], id: v[$0 + 3] == 0 ? nil : v[$0 + 3]) }
+        var out: [Quad] = []
+        out.reserveCapacity(v.count / 4)
+        var i = 0
+        while i < v.count {
+            let id: ID? = v[i + 3] == 0 ? nil : v[i + 3]
+            out.append(Quad(s: v[i], p: v[i + 1], o: v[i + 2], id: id))
+            i += 4
+        }
+        return out
     }
 
     /// Statements and inline properties matching a pattern (nil = any).

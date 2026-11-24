@@ -63,7 +63,7 @@
   "scripts": {
     "build": "napi build --platform --release --manifest-path ../../crates/graphlava-node/Cargo.toml --output-dir . --no-js --dts lib/native.d.ts",
     "build:debug": "napi build --platform --manifest-path ../../crates/graphlava-node/Cargo.toml --output-dir . --no-js --dts lib/native.d.ts",
-    "test": "node --test --test-concurrency=1 test/",
+    "test": "node --test --test-concurrency=1",
     "typecheck": "tsc -p examples/tsconfig.json",
     "bench:overhead": "node bench/overhead.mjs",
     "bench:commit": "node bench/commit-latency.mjs",

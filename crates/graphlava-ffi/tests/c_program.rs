@@ -39,16 +39,21 @@ fn staticlib() -> Option<PathBuf> {
 }
 
 fn find_or_build_staticlib() -> Option<PathBuf> {
+    // The test binary sits in `target/<profile>/deps/` or, with cargo's newer
+    // build-dir layout, deeper under `target/<profile>/build/`; the staticlib
+    // is in `target/<profile>/`. Search every ancestor.
     let exe = std::env::current_exe().ok()?;
-    let deps = exe.parent()?;
-    let candidates = [
-        deps.join("libgraphlava_ffi.a"),
-        deps.parent()?.join("libgraphlava_ffi.a"),
-    ];
-    if let Some(p) = candidates.iter().find(|p| p.exists()) {
-        return Some(p.clone());
+    let find = || {
+        exe.ancestors()
+            .map(|d| d.join("libgraphlava_ffi.a"))
+            .find(|p| p.exists())
+    };
+    if let Some(p) = find() {
+        return Some(p);
     }
-    let release = deps.parent()?.file_name()? == "release";
+    let release = exe
+        .ancestors()
+        .any(|d| d.file_name().is_some_and(|n| n == "release"));
     let mut cmd = Command::new(env!("CARGO"));
     cmd.args(["build", "-p", "graphlava-ffi", "--lib"]);
     if release {
@@ -68,7 +73,7 @@ fn find_or_build_staticlib() -> Option<PathBuf> {
             return None;
         }
     }
-    candidates.into_iter().find(|p| p.exists())
+    find()
 }
 
 /// Compiles `tests/c/<name>.c` and runs it on a fresh file. Extra compiler
