@@ -156,3 +156,18 @@ jobs:
       - name: tg check (report only)
         continue-on-error: true
         run: tg check
+
+  # Single required status check for the protect-main ruleset: aggregates every
+  # job above, so the ruleset doesn't need to list each matrix leg by name.
+  ci-ok:
+    name: CI ok
+    if: always()
+    needs: [lint, test, msrv, ios, android, docs, deny, formal, spec-graph]
+    runs-on: ubuntu-latest
+    steps:
+      - name: all required jobs succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = success ] || exit 1; done
