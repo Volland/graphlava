@@ -17,7 +17,7 @@ Measurement-only work that gates v0: the bake-off harness behind a minimal `Stor
 
 - cites:: [[17-benchmarks#Engine bake-off]] {intent: usesMethodIn}
 
-Deliverables: `spikes/bakeoff/` with redb, libmdbx and Sanakirja adapters, the dataset generator, the agent-memory mix, and a results report. Exit: [[17-benchmarks#Engine bake-off]] and [[17-benchmarks#Ordering count comparison]] have run at 10M statements, and the redb choice ([[adr:0002]]) is confirmed or reopened. The spike also answers, in its first week, three engine facts the design rests on: redb's repair time after an unclean shutdown at 10M and 100M statements ([[open-questions#Crash repair time on large files]]); bytes written per one-statement request with one engine transaction per request and per batch ([[adr:0025]]); and whether redb allows a savepoint in a transaction that has already written.
+Deliverables: `spikes/bakeoff/` with redb, libmdbx and Sanakirja adapters, the dataset generator, the agent-memory mix, and a results report. Exit: [[17-benchmarks#Engine bake-off]] and [[17-benchmarks#Ordering count comparison]] have run at 10M statements, and the redb choice ([[adr:0002]]) is confirmed or reopened. The spike also answers, in its first week, three engine facts the design rests on: redb's repair time after an unclean shutdown at 10M and 100M statements ([[resolved-questions#Crash repair time on large files]]); bytes written per one-statement request with one engine transaction per request and per batch ([[adr:0025]]); and whether redb allows a savepoint in a transaction that has already written.
 
 ## v0
 
@@ -52,11 +52,14 @@ Second surfaces and built-ins: Cypher subset, materialized rules, vector index, 
 | Cypher | Cypher/GQL subset over the same IR, multi predicates | [[12-cypher#Subset]] |
 | Datalog | `@materialized` rules: counting, Backward/Forward with budget, `stale` fallback, derived table | [[13-datalog#Materialized maintenance]] |
 | Vectors | scope-aware exact search, IVF lists with RaBitQ codes and re-ranking, local list splits, IR operator | [[15-vector-index#IVF layout]] |
-| Server | `meta-core-server`: SPARQL Protocol, Datalog endpoint, local IPC socket | [[16-api#Server crate]] |
+| Server | `graphlava-server`: SPARQL Protocol, Datalog endpoint, local IPC socket | [[16-api#Server crate]] |
 | Federation | remote `SERVICE` via HTTP resolver | [[11-sparql#Datalog service]] |
 | Mobile | Swift and Kotlin bindings, suspend/resume, iOS extension IPC | [[16-api#Mobile bindings]] |
+| Python | `graphlava` PyPI package: PyO3 extension, abi3 and 3.14t wheels for 5 targets, GIL released in core calls ([[adr:0042]]) | [[16-api#Python binding]] |
+| Node.js | `@graphlava/node` npm package: napi-rs extension, promise API on a dedicated pool ([[adr:0042]]) | [[16-api#Node.js binding]] |
+| Binding conformance | shared language-neutral corpus `bindings/conformance/`, run by Rust and every binding | [[16-api#Python binding]] |
 
-Exit: [[17-benchmarks#Mobile]], [[17-benchmarks#Datalog versus Nemo]], [[17-benchmarks#Vector search recall and latency]], [[17-benchmarks#Versus tiramemsu]] and [[17-benchmarks#Versus SQLite and Turso]] run.
+Exit: [[17-benchmarks#Mobile]], [[17-benchmarks#Datalog versus Nemo]], [[17-benchmarks#Vector search recall and latency]], [[17-benchmarks#Versus tiramemsu]], [[17-benchmarks#Versus SQLite and Turso]] and [[17-benchmarks#Binding overhead]] run.
 
 ## v2
 

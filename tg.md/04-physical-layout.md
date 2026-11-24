@@ -37,7 +37,9 @@ These tables exist in every database and are written by ordinary statement write
 | `stmt` | `id` 8 B | `(s, p, o)` 24 B + `flags: u16` | every statement with an ID |
 | `props` | `node_id` 8 B | property record, variable | literal-valued statement |
 | `plist` | `(pred, node)` 16 B | — | first value of a literal predicate on a node; removed with its last value |
-| `meta` | key string | value bytes | format version, flags, counters, cursors, statistics |
+| `meta` | key string | value bytes | format version, flags, counters, cursors, statistics, predicate declarations |
+| `unasserted` | `(s, p, o)` 24 B | `id: u64` | reifier of a triple that is not asserted ([[adr:0032]]) |
+| `txclock` | `commit: u64` 8 B | unix time µs `u64` | at most once a minute, for the sweep window |
 
 <rule id="pl-base-orderings" strength="must">
 
@@ -59,7 +61,8 @@ Every statement that has an ID has one `stmt` record. `stmt` is the only table t
 | 3 | promoted derived fact |
 | 4 | has annotations (hint for cascade; may be stale-true, never stale-false) |
 | 5 | multi predicate |
-| 6..15 | reserved, must be zero |
+| 6 | unasserted ([[adr:0032]]) |
+| 7..15 | reserved, must be zero |
 
 ### Multi predicate tables
 
@@ -134,7 +137,7 @@ An entry's value is an inline literal ID, a dictionary literal ID (interned or o
 
 <rule id="pl-props-spill" strength="should">
 
-A record with more than 256 entries spills: the record keeps the header with the spill flag, and the entries move to `props_ext` keyed `(node, pred, value)` 24 B with no value. The threshold is to be tuned by measurement ([[open-questions#Large property records]]).
+A record with more than 256 entries or more than 2 KiB spills ([[adr:0034]]): the record keeps the header with the spill flag, and the entries move to `props_ext` keyed `(node, pred, value)` 24 B with no value. Both thresholds are tuned by measurement before the format freeze.
 
 </rule>
 
@@ -144,8 +147,9 @@ Owned by [[08-hyperedges#Record format]]; listed here for the complete table inv
 
 | Table | Key | Value |
 | --- | --- | --- |
-| `hedge` | `e` 8 B | `type: u64`, `n: u16`, `n × (role: u64, node: u64)` |
+| `hedge` | `e` 8 B | 16-byte header (version, flags, `k`, type) then `k` fillers in declared role order, or `k × (role, node)` pairs for a type with a `many` role ([[08-hyperedges#Record format]]) |
 | `incidence` | `(node, role, type, e)` 32 B | — |
+| `hedge_promo` | `(e, role, node)` 24 B | promoted role statement ID `u64` |
 
 ### Graph tables
 
@@ -157,7 +161,13 @@ Owned by [[09-graphs#Chunk membership]] and [[09-graphs#Extra membership]]; list
 | `kind_chunk` | `(kind, chunk_no)` 16 B | — |
 | `gmem` | `(g, id)` 16 B | `(flags: u8, ptr: u64)`: extra membership, or a `moved` tombstone that removes the home membership, plus promoted membership statement ID |
 | `gmem_rev` | `(id, g)` 16 B | — |
+| `graph_chunks` | `(graph, kind, chunk_no)` 24 B | — |
+| `gparent` | `(child, parent)` 16 B | — |
+| `gchild` | `(parent, child)` 16 B | — |
 | `in_star` | `(child, ancestor)` 16 B | — (a set; [[adr:0029]]) |
+| `in_star_rev` | `(ancestor, child)` 16 B | — |
+| `gname` | name IRI ID 8 B | graph ID `u64` ([[22-implementation-decisions#Graph names]]) |
+| `gname_rev` | graph ID 8 B | name IRI ID `u64` |
 
 ### Other tables
 
@@ -248,7 +258,7 @@ Inserting or deleting a tuple rewrites exactly one block (two on split, two on m
 
 </rule>
 
-Decoding uses SIMD with runtime dispatch (AVX2 on x86-64, NEON on ARM64), with a scalar fallback; speed is to be measured. A block of about 8 KiB is larger than a 4 KiB page, so redb stores it across pages or in overflow; the effect on write amplification is to be measured ([[open-questions#Page size on redb]]).
+Decoding uses SIMD with runtime dispatch (AVX2 on x86-64, NEON on ARM64), with a scalar fallback; speed is to be measured. A block of about 8 KiB is larger than a 4 KiB page, so redb stores it across pages or in overflow; the effect on write amplification is measured in the bake-off, and the v2 block size is chosen to fit one redb page ([[adr:0035]]).
 
 ### Interaction with overwrites
 
@@ -310,6 +320,4 @@ These tests check the on-disk contract and the consistency invariants between ta
 
 Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
 
-- [[open-questions#Large property records]]
-- [[open-questions#Page size on redb]]
 - [[open-questions#Value index drop policy]]

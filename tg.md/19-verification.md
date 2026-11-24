@@ -5,7 +5,7 @@ specs: ["adr:0019", "adr:0020"]
 ---
 # Verification strategy
 
-How meta-core argues that it is correct and fast: a Lean 4 model with machine-checked theorems, a refinement bridge from that model to the Rust code, and tests, crash injection, conformance suites and benchmarks around it.
+How graphlava argues that it is correct and fast: a Lean 4 model with machine-checked theorems, a refinement bridge from that model to the Rust code, and tests, crash injection, conformance suites and benchmarks around it.
 
 - follows_from:: [[adr:0019]]
 - follows_from:: [[adr:0020]]
@@ -14,7 +14,7 @@ How meta-core argues that it is correct and fast: a Lean 4 model with machine-ch
 
 ## Purpose
 
-Tests sample behaviour; proofs cover every input of a model. meta-core needs both, because its core promises are universal: IDs are never reused, statements stay unique, nesting stays acyclic, acknowledged commits survive.
+Tests sample behaviour; proofs cover every input of a model. graphlava needs both, because its core promises are universal: IDs are never reused, statements stay unique, nesting stays acyclic, acknowledged commits survive.
 
 The goal is one argument per requirement, at the strongest level that is affordable. The proof ledger is [[20-proofs]]; the E2E catalogue is [[21-e2e-tests]]; the measurement plan is [[17-benchmarks]].
 
@@ -25,7 +25,7 @@ Seven levels, strongest first. Each requirement states its levels in its spec (t
 | Level | Name | What it shows | Where |
 | --- | --- | --- | --- |
 | L0 | Lean proof | an invariant holds for **every** state and operation of the model | `formal/MetaCore/*.lean` |
-| L1 | Refinement | the Rust store behaves like the model on seeded operation traces | `formal/Main.lean` → `crates/meta-core/tests/refinement.rs` |
+| L1 | Refinement | the Rust store behaves like the model on seeded operation traces | `formal/Main.lean` → `crates/graphlava/tests/refinement.rs` |
 | L2 | Property test | layout-level facts the model abstracts (orderings agree, inline routing, codecs) | `proptest` in each crate |
 | L3 | End-to-end | a user-visible scenario works through the public API on a real file | [[21-e2e-tests]] |
 | L4 | Crash / fault | recovery after `kill -9` at every commit point is a durable prefix | crash harness, child processes |

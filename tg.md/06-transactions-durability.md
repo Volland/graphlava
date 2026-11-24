@@ -7,7 +7,7 @@ specs: ["adr:0002", "adr:0006", "adr:0012", "adr:0018", "adr:0025", "adr:0026"]
 ---
 # Transactions and durability
 
-How meta-core runs transactions on redb: one writer and many snapshot readers in the owner process, three durability levels per transaction, group commit, crash recovery, and cascade delete.
+How graphlava runs transactions on redb: one writer and many snapshot readers in the owner process, three durability levels per transaction, group commit, crash recovery, and cascade delete.
 
 - follows_from:: [[adr:0002]]
 - follows_from:: [[adr:0012]]
@@ -73,7 +73,7 @@ The default durability level is `ordered`. A caller may choose `sync` or `relaxe
 | --- | --- | --- | --- |
 | `sync` | the transaction survives any crash or power loss | runs in the open batch and closes it at once with `Durability::Immediate` | user-visible saves, checkpoints |
 | `ordered` | the transaction survives any crash; the call returns only after its batch is flushed | runs in the open batch; the batch commits once with `Durability::Immediate` | default for agent memory writes |
-| `relaxed` | the transaction is atomic and crash-consistent but may be lost; a later `sync` or `ordered` batch makes it durable | runs in the open batch; a batch of only `relaxed` requests commits with `Durability::None` | scratch state, caches, bulk load |
+| `relaxed` | the transaction is atomic and crash-consistent but may be lost on an OS crash, a power cut or a crash of the owner process; a later `sync` or `ordered` batch makes it durable | runs in the open batch; a batch of only `relaxed` requests commits with `Durability::None` | scratch state, caches, bulk load |
 
 <rule id="tx-durability-prefix" strength="must">
 
@@ -86,6 +86,20 @@ Durability is prefix-ordered: if a crash keeps transaction T, it keeps every tra
 The mapping above relies on redb guaranteeing that a `Durability::Immediate` commit is durable when it returns and makes every earlier `Durability::None` commit durable, and that a crash after a `None` commit recovers to a consistent earlier state. `None` is used only for batches of `relaxed` requests. These properties are verified by the engine spike before v0 ([[17-benchmarks#Engine bake-off]]).
 
 </rule>
+
+<rule id="tx-relaxed-bound" strength="must">
+
+At most `max_relaxed_run` batches (default 100) commit with `Durability::None` in a row; the next batch commits with `Durability::Immediate`. redb frees pages only at durable commits, so an unbounded run of `None` commits grows the file without limit, and the bound also caps how many relaxed batches a crash can lose. On-demand ordering and value-index builds commit each batch durably.
+
+</rule>
+
+<rule id="tx-quick-repair" strength="must">
+
+`OpenOptions::quick_repair` makes every durable commit also save redb's allocator state, so the first open after a crash takes milliseconds instead of a full repair. It is on by default on iOS and Android, where every OS kill is unclean, and off elsewhere, because it roughly doubles durable-commit latency.
+
+</rule>
+
+The engine bake-off confirmed both redb properties above and found the page-freeing limit ([[22-implementation-decisions#Engine bake-off outcome]]).
 
 <non-goal>
 
@@ -167,7 +181,7 @@ A read transaction never sees a `sync` or `ordered` request before that request 
 
 ## Crash recovery
 
-After a crash, opening the file returns it to the last durable commit. No meta-core-level log exists; redb's copy-on-write commit protocol is the only recovery mechanism.
+After a crash, opening the file returns it to the last durable commit. No graphlava-level log exists; redb's copy-on-write commit protocol is the only recovery mechanism.
 
 <rule id="tx-recovery-state" strength="must">
 
@@ -187,7 +201,7 @@ On open, the format version and feature flags in `meta` are checked before any o
 
 </rule>
 
-redb may repair its allocator state after an unclean shutdown, and the time this takes on a large file is to be measured; see [[open-questions#Crash repair time on large files]].
+redb may repair its allocator state after an unclean shutdown, and the time this takes on a large file is to be measured; see [[resolved-questions#Crash repair time on large files]].
 
 ## Cascade delete
 
@@ -238,7 +252,9 @@ Breadth-first over subjects, using the SPO ordering prefix and the `props` recor
 
 ### References from the object position
 
-A statement whose object is X (`(:note, :about, stmt#42)`) is not an annotation and is not deleted by rule `tx-cascade-annotations`. After the delete its object is a dangling ID. Whether to cascade, block or keep is [[open-questions#Delete with object-position references]].
+A statement whose object is X (`(:note, :about, stmt#42)`) is not an annotation and is not deleted by rule `tx-cascade-annotations`; it blocks the delete unless it is `DETACH` ([[adr:0036]]).
+
+`DETACH` deletes the referring statement too, as for hyperedge roles, so dangling object IDs are never created.
 
 ## Platform notes
 
@@ -261,5 +277,4 @@ Tests are written against the rules above; crash tests run on all five platforms
 
 Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
 
-- [[open-questions#Crash repair time on large files]]
-- [[open-questions#Delete with object-position references]]
+- [[resolved-questions#Crash repair time on large files]]

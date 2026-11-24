@@ -6,7 +6,7 @@ specs: ["adr:0002", "adr:0012", "adr:0018"]
 ---
 # Storage trait
 
-The Rust trait that hides the KV engine from the rest of meta-core, its transaction and iterator contract, and the redb adapter that implements it in v0. Bake-off adapters for libmdbx and Sanakirja exist only in spikes.
+The Rust trait that hides the KV engine from the rest of graphlava, its transaction and iterator contract, and the redb adapter that implements it in v0. Bake-off adapters for libmdbx and Sanakirja exist only in spikes.
 
 - follows_from:: [[adr:0002]]
 - follows_from:: [[adr:0012]]
@@ -112,7 +112,7 @@ After a crash, opening the file yields the state of the last commit that returne
 
 <rule id="st-no-engine-types" strength="must">
 
-No engine type appears in the trait's public signatures. Crates above `meta-core-storage` depend only on the trait.
+No engine type appears in the trait's public signatures. Crates above `graphlava-storage` depend only on the trait.
 
 </rule>
 
@@ -166,7 +166,7 @@ The mapping of `Flush` and `NoFlush` to redb durability modes, and the OS sync c
 
 <rule id="st-redb-pinned" strength="must">
 
-The redb version is pinned exactly. Upgrading it is a reviewed change that reruns the golden-file tests of [[04-physical-layout#Test plan]], because a redb file-format change is a meta-core format change ([[adr:0018]]).
+The redb version is pinned exactly. Upgrading it is a reviewed change that reruns the golden-file tests of [[04-physical-layout#Test plan]], because a redb file-format change is a graphlava format change ([[adr:0018]]).
 
 </rule>
 
@@ -176,13 +176,13 @@ Some handover assumptions do not hold on redb. Each is handled above the trait o
 
 | Handover assumption | On redb | Handling |
 | --- | --- | --- |
-| 16 KB pages (§4.3) | page size not confirmed configurable | [[open-questions#Page size on redb]] |
+| 16 KB pages (§4.3) | page size not confirmed configurable | measured in the bake-off ([[adr:0035]]) |
 | `ordered` durability as a barrier fsync | no barrier mode | group commit, [[06-transactions-durability#Group commit]] |
 | multi-process access | single process only | owner process, [[adr:0002]] |
 | native value compression | none | v2 blocks in the value layer, [[04-physical-layout#Encoding v2]] |
 | O(1) database clone | none | not offered; Sanakirja remains a deferred option in [[adr:0002]] |
 | savepoint inside a transaction that has already written | not available, as far as known (verified in the spike) | per-request overlays inside one batch transaction ([[06-transactions-durability#Group commit]], [[adr:0025]]) |
-| fast reopen after an unclean shutdown | repair walks the file; time grows with size (to be measured) | [[open-questions#Crash repair time on large files]] |
+| fast reopen after an unclean shutdown | repair walks the file; time grows with size (to be measured) | [[resolved-questions#Crash repair time on large files]] |
 
 ### Spike adapters
 
@@ -207,6 +207,5 @@ One conformance suite runs against every adapter, so the trait's rules mean the 
 
 ## Open items
 
-Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
+No questions remain open; the ones this spec raised are answered in [[resolved-questions]].
 
-- [[open-questions#Page size on redb]]

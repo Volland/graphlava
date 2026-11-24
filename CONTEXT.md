@@ -1,4 +1,4 @@
-# meta-core
+# graphlava
 
 A mutable, current-state-only metagraph database in Rust, tuned for agent-memory workloads.
 

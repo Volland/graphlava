@@ -27,7 +27,7 @@ HNSW or any graph-based ANN index. Neighbour-list rewrites touch many pages per 
 
 <non-goal>
 
-Computing embeddings. Callers supply vectors; meta-core stores and searches them.
+Computing embeddings. Callers supply vectors; graphlava stores and searches them.
 
 </non-goal>
 

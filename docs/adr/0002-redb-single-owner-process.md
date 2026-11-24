@@ -50,3 +50,5 @@ App extensions and CLI-plus-app setups need an IPC layer. redb has no native pag
 ## More Information
 
 Resolves handover open question 2. The bake-off in `docs/17-benchmarks.md` still validates redb against the real key layout. Note: user wrote "reddb"; interpreted as redb (cberner/redb).
+
+Confirmed by the engine bake-off (2026-11-24, `spikes/bakeoff/RESULTS.md`): no engine is 2x better on file size or mix p99; redb 2.6.4 is kept. Consequences recorded in `tg.md/22-implementation-decisions.md`, section "Engine bake-off outcome".

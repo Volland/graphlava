@@ -3,7 +3,7 @@
 This directory defines the high-level concepts, business logic and architecture of the project in markdown, managed with the `tg` CLI (compatible with lat.md). Run `tg check` to validate it.
 
 - [[code-ontology]] — shared vocabulary of intent types and typed edges between intent and code
-- [[pre-design]] — original design handover for meta-core (input to the specs, not maintained)
+- [[pre-design]] — original design handover for graphlava (input to the specs, not maintained)
 - [[00-overview]] — vision, goals, architecture and map of the specs
 - [[01-data-model]] — terms, statements, inline properties, promotion, annotations, metagraph kinds
 - [[02-id-encoding]] — 64-bit ID layout, inline literals, canonical forms, allocation
@@ -26,5 +26,8 @@ This directory defines the high-level concepts, business logic and architecture 
 - [[19-verification]] — assurance levels L0–L6, Lean model, refinement bridge, CI gates
 - [[20-proofs]] — ledger of Lean 4 theorems and open proof obligations, traced to requirements
 - [[21-e2e-tests]] — catalogue of end-to-end scenarios on real files, processes and the FFI
+- [[22-implementation-decisions]] — small decisions made while implementing the store core
+- [[23-binding-decisions]] — decisions of the host-language bindings (Python, Node.js, mobile)
+- [[24-binding-constraints]] — packaging and interpreter rules the bindings must respect
 - [[open-questions]] — undecided design questions with options and recommendations
 - [[resolved-questions]] — questions answered by ADRs

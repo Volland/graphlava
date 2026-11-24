@@ -7,7 +7,7 @@ specs: ["adr:0014", "adr:0013", "adr:0007", "adr:0008", "adr:0004", "adr:0006", 
 ---
 # SPARQL 1.2
 
-The primary query surface of meta-core: the v0 scope, how RDF 1.2 reifiers map to statement IDs, graph semantics, the Datalog service, documented deviations and the conformance targets.
+The primary query surface of graphlava: the v0 scope, how RDF 1.2 reifiers map to statement IDs, graph semantics, the Datalog service, documented deviations and the conformance targets.
 
 - follows_from:: [[adr:0014]]
 - follows_from:: [[adr:0013]]
@@ -60,13 +60,13 @@ For a pattern `<< ?s ?p ?o ~ ?r >>` the compiler emits one `Scan(triple)` that b
 
 <rule id="sparql-reifier-unique" strength="must">
 
-Because `(s,p,o)` is unique for non-multi predicates ([[adr:0004]]), a triple has at most one reifier. Inserting `<< :a :p :b ~ :r2 >>` when the statement already has ID `#42` binds `:r2` to `#42` only if `:r2` is a fresh blank node; if `:r2` is an IRI that is not `#42`, the update fails with "reifier mismatch". For `multi` predicates each reifier names its own statement.
+Because `(s,p,o)` is unique for non-multi predicates ([[adr:0004]]), a triple has one statement ID. Inserting `<< :a :p :b ~ :r2 >>` when the statement already has ID `#42` binds a blank `:r2` to `#42` and makes an IRI `:r2` an alias of `#42` ([[adr:0032]]); it fails with "reifier mismatch" only when `:r2` already names another statement. For `multi` predicates each reifier names its own statement.
 
 </rule>
 
 <rule id="sparql-reifier-iri" strength="should">
 
-Reifiers are returned to clients as IRIs of the form `<urn:meta-core:stmt:{id}>`. Clients may use these IRIs in later queries and updates; the parser maps them back to the ID without a dictionary lookup.
+Reifiers are returned to clients as IRIs of the form `<https://graphlava.org/ns/stmt/{id}>` ([[adr:0031]]). A second reifier IRI named for a triple that already has an ID becomes an alias of that ID ([[adr:0032]]). Clients may use these IRIs in later queries and updates; the parser maps them back to the ID without a dictionary lookup.
 
 </rule>
 
@@ -220,7 +220,7 @@ A rule head predicate is visible from SPARQL under an IRI. Named rules declare t
 
 ## Deviations
 
-Places where meta-core intentionally differs from, or extends, SPARQL 1.2. Each deviation has an id so tests and docs can point at it.
+Places where graphlava intentionally differs from, or extends, SPARQL 1.2. Each deviation has an id so tests and docs can point at it.
 
 <rule id="sparql-dev-inplace-update" strength="must">
 
@@ -317,7 +317,7 @@ One update request is one writer transaction. Any error, including a cascade ove
 
 ## Conformance
 
-The test suites that define "SPARQL done" for v0, and how meta-core's deviations are handled inside them.
+The test suites that define "SPARQL done" for v0, and how graphlava's deviations are handled inside them.
 
 <rule id="sparql-conf-11" strength="must">
 
@@ -333,13 +333,19 @@ The W3C RDF 1.2 and SPARQL 1.2 test suites run against a pinned draft. The draft
 
 <rule id="sparql-conf-deviations" strength="must">
 
-Each deviation rule in this file has at least one own test that proves the meta-core behaviour, and the conformance runner proves the standard behaviour in `direct` mode where one exists.
+Each deviation rule in this file has at least one own test that proves the graphlava behaviour, and the conformance runner proves the standard behaviour in `direct` mode where one exists.
 
 </rule>
 
+The pinned target ([[adr:0038]]) is the SPARQL 1.2 Query Language W3C Working Draft of 25 June 2026 (<https://www.w3.org/TR/2026/WD-sparql12-query-20260625/>) with the SPARQL 1.1 Recommendations, tested with the `w3c/rdf-tests` suites at commit `3cbb83bd6d325bcddb1e2496037adb770a9cd769` (2026-11-23). Both are recorded in `crates/graphlava/tests/w3c/PINNED.md`; `fetch.sh` next to it downloads that commit into `target/w3c-tests/`, and the `conformance` CI job runs the runner `tests/w3c.rs` over the SPARQL 1.1 query and update suites and the SPARQL 1.2 suite in standard mode (`QueryOptions::standard()`).
+
+Skip-list policy: `crates/graphlava/tests/w3c/skip.txt` names every failing test with its reason (parser limits of `spargebra`, literals that storage canonicalises, the reifier deviation for triple terms, base direction). The runner fails on an unlisted failure and on a listed test that passes, so the list always equals the set of failing tests; adding to it is a reviewed change.
+
+The list holds 25 tests: 4 SPARQL 1.1 tests (a `spargebra` parser limit and three timezone tests) and 21 SPARQL 1.2 tests. Of the 1.2 skips, 9 are triple-term tests that need several distinct reifiers for one triple, a reifier object kept apart from its triple term, or a delete that keeps annotations ([[22-implementation-decisions#Triple terms map to statement IDs]]); 7 need base direction; 5 are parser limits or canonicalised numerics.
+
 ## Test plan
 
-Beyond the conformance suites: differential and property tests that guard the reifier and graph mappings, which are where meta-core differs most from a plain triple store.
+Beyond the conformance suites: differential and property tests that guard the reifier and graph mappings, which are where graphlava differs most from a plain triple store.
 
 - Differential testing against Oxigraph on random SPARQL queries over random datasets with no nested graphs, in `direct` mode (results must match as bags).
 - Reifier tests: every annotation pattern returns the same results whether the annotated statement started as an inline property or as a stored statement.
@@ -349,10 +355,5 @@ Beyond the conformance suites: differential and property tests that guard the re
 
 ## Open items
 
-Questions this spec leaves open; each is an `OpenQuestion` in the open-questions file.
+No questions remain open; the ones this spec raised are answered in [[resolved-questions]].
 
-- [[open-questions#SPARQL 1.2 draft pin]]: which W3C draft v0 targets.
-- [[open-questions#Reifier IRI form]]: whether reifiers are exposed as `urn:meta-core:stmt:{id}` IRIs or as blank nodes.
-- [[open-questions#Reifier on existing statement]]: what happens when an update names a different IRI reifier for an existing triple.
-- [[open-questions#Default write graph]]: where `INSERT DATA` without `GRAPH` writes.
-- [[open-questions#SPARQL parser reuse]]: reuse `spargebra` or write an own parser for RDF 1.2 syntax.
