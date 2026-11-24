@@ -67,7 +67,10 @@ jobs:
         if: matrix.zig
         with:
           version: 0.13.0
-      - run: npm ci
+      # npm 11 `npm ci` refuses a lockfile without the per-target packages,
+      # which are not on the registry until the first publish; `npm install`
+      # still honours the lockfile for everything else.
+      - run: npm install --no-audit --no-fund
       - name: Build
         shell: bash
         run: |
@@ -104,7 +107,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: npm ci
+      # npm 11 `npm ci` refuses a lockfile without the per-target packages,
+      # which are not on the registry until the first publish; `npm install`
+      # still honours the lockfile for everything else.
+      - run: npm install --no-audit --no-fund
       - uses: actions/download-artifact@v4
         with:
           name: bindings-${{ matrix.name }}
@@ -127,7 +133,10 @@ jobs:
     container: node:${{ matrix.node }}-alpine
     steps:
       - uses: actions/checkout@v4
-      - run: npm ci
+      # npm 11 `npm ci` refuses a lockfile without the per-target packages,
+      # which are not on the registry until the first publish; `npm install`
+      # still honours the lockfile for everything else.
+      - run: npm install --no-audit --no-fund
       - uses: actions/download-artifact@v4
         with:
           name: bindings-linux-x64-musl
@@ -204,7 +213,10 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
-      - run: npm ci
+      # npm 11 `npm ci` refuses a lockfile without the per-target packages,
+      # which are not on the registry until the first publish; `npm install`
+      # still honours the lockfile for everything else.
+      - run: npm install --no-audit --no-fund
       - run: npm run build
       - name: Binding overhead (1M statements, props(), event-loop delay)
         run: node bench/overhead.mjs --statements 1000000 --out "$RUNNER_TEMP/node-overhead.json"

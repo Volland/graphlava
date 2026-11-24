@@ -170,9 +170,12 @@ jobs:
           arch: ${{ matrix.arch }}
           target: ${{ matrix.target }}
           working-directory: bindings/kotlin
+          # On failure, print the per-test results and the app's log so the
+          # cause shows in the job log, not only in the HTML report.
           script: |
             adb shell getconf PAGE_SIZE
-            ./gradlew :graphlava-android:connectedAndroidTest
+            adb logcat -c
+            ./gradlew :graphlava-android:connectedAndroidTest || { find graphlava-android/build/outputs/androidTest-results -name '*.xml' -exec cat {} + ; adb logcat -d -s AndroidRuntime:E TestRunner:* graphlava:* '*:F' | tail -200 ; exit 1 ; }
 
   # Device runs need the reference iPhone and Android phone on a self-hosted
   # runner labelled `graphlava-devices` (tasks 3.8 and 5.2): the background-
