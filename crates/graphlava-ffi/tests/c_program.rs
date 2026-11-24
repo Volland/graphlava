@@ -30,15 +30,29 @@ fn native_libs() -> &'static [&'static str] {
 }
 
 /// `libgraphlava_ffi.a` sits next to this test binary in `target/<profile>/deps`.
+/// `cargo test` builds the library only as an rlib, so the staticlib may
+/// not exist yet: build it once with the same profile when it is missing.
 fn staticlib() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let deps = exe.parent()?;
-    [
+    let candidates = [
         deps.join("libgraphlava_ffi.a"),
         deps.parent()?.join("libgraphlava_ffi.a"),
-    ]
-    .into_iter()
-    .find(|p| p.exists())
+    ];
+    if let Some(p) = candidates.iter().find(|p| p.exists()) {
+        return Some(p.clone());
+    }
+    let release = deps.parent()?.file_name()? == "release";
+    let mut cmd = Command::new(env!("CARGO"));
+    cmd.args(["build", "-p", "graphlava-ffi", "--lib"]);
+    if release {
+        cmd.arg("--release");
+    }
+    let ok = cmd.status().is_ok_and(|s| s.success());
+    if !ok {
+        return None;
+    }
+    candidates.into_iter().find(|p| p.exists())
 }
 
 /// Compiles `tests/c/<name>.c` and runs it on a fresh file. Extra compiler

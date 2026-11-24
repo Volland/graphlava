@@ -4,6 +4,17 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+# Each entry below reaches only dev-dependencies of `graphlava`; none ships in
+# a published crate. Drop an entry once the upstream crate moves on.
+ignore = [
+    # quick-xml 0.37 via oxrdfxml/sparesults: parses the pinned W3C test
+    # suites (trusted local files) in tests only.
+    { id = "RUSTSEC-2026-0194", reason = "dev-only: W3C suite readers parse trusted local files" },
+    { id = "RUSTSEC-2026-0195", reason = "dev-only: W3C suite readers parse trusted local files" },
+    # bincode and proc-macro-error2 via iai-callgrind: benchmark harness only.
+    { id = "RUSTSEC-2025-0141", reason = "dev-only: iai-callgrind benchmark harness" },
+    { id = "RUSTSEC-2026-0173", reason = "dev-only: iai-callgrind benchmark harness" },
+]
 
 [licenses]
 version = 2

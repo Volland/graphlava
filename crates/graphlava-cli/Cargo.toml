@@ -16,6 +16,7 @@ include = ["src/**/*.rs", "Cargo.toml", "README.md"]
 [[bin]]
 name = "graphlava"
 path = "src/main.rs"
+doc = false
 
 [dependencies]
 graphlava = { version = "0.1.0-alpha.1", path = "../graphlava" }

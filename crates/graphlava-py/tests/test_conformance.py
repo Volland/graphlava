@@ -11,6 +11,7 @@ import datetime as dt
 import json
 import math
 import pathlib
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -22,6 +23,19 @@ CORPUS = pathlib.Path(__file__).resolve().parents[3] / "bindings" / "conformance
 XSD = "http://www.w3.org/2001/XMLSchema#"
 EX = "http://ex.org/"
 
+
+
+def _iso_datetime(v: str) -> dt.datetime:
+    """``datetime.fromisoformat`` that also accepts 1-6 fractional digits.
+
+    Python 3.10 takes only 3 or 6 digits ('...00.5+00:00' fails there), so
+    pad the fraction to 6 before parsing.
+    """
+    v = v.replace("Z", "+00:00")
+    m = re.match(r"^(.*T\d\d:\d\d:\d\d)\.(\d{1,6})(.*)$", v)
+    if m:
+        v = f"{m[1]}.{m[2]:0<6}{m[3]}"
+    return dt.datetime.fromisoformat(v)
 
 def load() -> list[dict[str, Any]]:
     cases = []
@@ -72,9 +86,9 @@ def native(n: dict[str, Any]) -> Any:
     if ty == "decimal":
         return Decimal(v)
     if ty == "datetime":
-        return dt.datetime.fromisoformat(v.replace("Z", "+00:00"))
+        return _iso_datetime(v)
     if ty == "naive_datetime":
-        return dt.datetime.fromisoformat(v)
+        return _iso_datetime(v)
     if ty == "date":
         return dt.date.fromisoformat(v)
     raise KeyError(ty)
@@ -135,7 +149,7 @@ def _py_value(lex: str, dtp: str) -> Any:
     if local == "decimal":
         return Decimal(lex)
     if local == "dateTime" and lex.endswith("Z"):
-        return dt.datetime.fromisoformat(lex[:-1] + "+00:00")
+        return _iso_datetime(lex)
     if local == "date" and not lex.endswith("Z"):
         return dt.date.fromisoformat(lex)
     return gl.Literal(lex, dtp)

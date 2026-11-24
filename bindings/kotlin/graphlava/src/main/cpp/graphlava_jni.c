@@ -423,7 +423,7 @@ JNIEXPORT jlongArray FN(rowsNextBatch)(JNIEnv *env, jclass c, jlong rows) {
     if (!a) return NULL;
     jlong head[2] = {(jlong)nr, (jlong)nc};
     (*env)->SetLongArrayRegion(env, a, 0, 2, head);
-    if (nr * nc) (*env)->SetLongArrayRegion(env, a, 2, (jsize)(nr * nc), (const jlong *)ids);
+    if (nr > 0 && nc > 0) (*env)->SetLongArrayRegion(env, a, 2, (jsize)(nr * nc), (const jlong *)ids);
     return a;
 }
 

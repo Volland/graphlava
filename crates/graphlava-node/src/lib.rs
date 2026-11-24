@@ -7,12 +7,12 @@
 //!
 //! - Every call that does I/O, runs a query or waits on a commit returns a
 //!   Promise and runs off the JavaScript thread: reads on a read pool
-//!   ([`pool`]), writes in order on one writer thread per database ([`db`],
-//!   [`txn`]). The `*Sync` methods exist only for `@graphlava/node/sync`.
+//!   (`pool`), writes in order on one writer thread per database (`db`,
+//!   `txn`). The `*Sync` methods exist only for `@graphlava/node/sync`.
 //! - IDs cross as `bigint` (and `BigUint64Array` columns), never as `number`.
 //! - A process-global registry of open paths refuses a second open of a file
 //!   in this process, from any worker thread, with `LOCKED`.
-//! - Errors carry a stable code ([`error`]); a panic becomes `INTERNAL`.
+//! - Errors carry a stable code (`error`); a panic becomes `INTERNAL`.
 
 // @tg: implements:: [[adr:0042]]
 

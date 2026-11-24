@@ -1864,8 +1864,8 @@ impl Admin<'_> {
         }
         if !built.is_empty() {
             self.db.inner.plans.clear();
-            for k in 0..3 {
-                self.db.inner.wanted[k].store(0, std::sync::atomic::Ordering::Relaxed);
+            for w in &self.db.inner.wanted {
+                w.store(0, std::sync::atomic::Ordering::Relaxed);
             }
         }
         Ok(built)
