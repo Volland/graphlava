@@ -1,0 +1,196 @@
+# Node.js binding @graphlava/node ([[16-api#Node.js binding]], change v1-node-binding).
+#
+# build:   prebuilt N-API 9 addons for the six supported targets.
+# test:    the node:test suite (incl. conformance corpus and oracle replay) on
+#          Node 20, 22 and 24 for every target that a hosted runner can execute.
+# smoke:   `npm pack` + `npm install` of the tarball and the per-target
+#          package on every target × Node 20/22/24, then test-support/smoke.mjs
+#          (scenario "Install and smoke test per target").
+# msrv:    the binding crate's own MSRV (1.88, napi 3).
+# bench:   nightly Binding overhead for Node (tg.md/17-benchmarks.md).
+name: node
+
+on:
+  push:
+    branches: [main]
+    paths: ["crates/**", "bindings/node/**", "bindings/conformance/**", "Cargo.*", ".github/workflows/node.yml"]
+  pull_request:
+    paths: ["crates/**", "bindings/node/**", "bindings/conformance/**", "Cargo.*", ".github/workflows/node.yml"]
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: bindings/node
+
+jobs:
+  msrv:
+    name: MSRV graphlava-node (1.88)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p graphlava-node --locked
+
+  build:
+    name: build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, name: linux-x64-gnu, os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, name: linux-arm64-gnu, os: ubuntu-22.04-arm }
+          - { target: x86_64-unknown-linux-musl, name: linux-x64-musl, os: ubuntu-22.04, zig: true }
+          - { target: aarch64-apple-darwin, name: darwin-arm64, os: macos-14 }
+          - { target: x86_64-apple-darwin, name: darwin-x64, os: macos-13 }
+          - { target: x86_64-pc-windows-msvc, name: win32-x64-msvc, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: node-${{ matrix.target }}
+      - uses: mlugg/setup-zig@v1
+        if: matrix.zig
+      - run: npm ci
+      - name: Build
+        shell: bash
+        run: |
+          if [ "${{ matrix.zig }}" = "true" ]; then
+            npx napi build --platform --release --target ${{ matrix.target }} --cross-compile \
+              --manifest-path ../../crates/graphlava-node/Cargo.toml --output-dir . --no-js --dts lib/native.d.ts
+          else
+            npx napi build --platform --release --target ${{ matrix.target }} \
+              --manifest-path ../../crates/graphlava-node/Cargo.toml --output-dir . --no-js --dts lib/native.d.ts
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.name }}
+          path: bindings/node/graphlava.${{ matrix.name }}.node
+          if-no-files-found: error
+
+  test:
+    name: test ${{ matrix.name }} node ${{ matrix.node }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+        name: [linux-x64-gnu, linux-arm64-gnu, darwin-arm64, darwin-x64, win32-x64-msvc]
+        include:
+          - { name: linux-x64-gnu, os: ubuntu-22.04 }
+          - { name: linux-arm64-gnu, os: ubuntu-22.04-arm }
+          - { name: darwin-arm64, os: macos-14 }
+          - { name: darwin-x64, os: macos-13 }
+          - { name: win32-x64-msvc, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.name }}
+          path: bindings/node
+      - run: npx tsc -p examples/tsconfig.json
+      - run: npm test
+        env:
+          # The oracle replay runs where the Lean toolchain is installed (ci.yml
+          # `formal` job builds it); here it is skipped when absent.
+          GRAPHLAVA_NODE_REFINEMENT_SEEDS: "16"
+
+  test-musl:
+    name: test linux-x64-musl node ${{ matrix.node }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    runs-on: ubuntu-22.04
+    container: node:${{ matrix.node }}-alpine
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: bindings-linux-x64-musl
+          path: bindings/node
+      - run: npm test
+
+  smoke:
+    name: install smoke ${{ matrix.name }} node ${{ matrix.node }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+        name: [linux-x64-gnu, linux-arm64-gnu, linux-x64-musl, darwin-arm64, darwin-x64, win32-x64-msvc]
+        include:
+          - { name: linux-x64-gnu, os: ubuntu-22.04 }
+          - { name: linux-arm64-gnu, os: ubuntu-22.04-arm }
+          - { name: linux-x64-musl, os: ubuntu-22.04, container: true }
+          - { name: darwin-arm64, os: macos-14 }
+          - { name: darwin-x64, os: macos-13 }
+          - { name: win32-x64-msvc, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container && format('node:{0}-alpine', matrix.node) || null }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        if: ${{ !matrix.container }}
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.name }}
+          path: bindings/node/npm/${{ matrix.name }}
+      - name: Pack the main and the per-target package
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/pkgs"
+          npm pack --pack-destination "$RUNNER_TEMP/pkgs"
+          (cd npm/${{ matrix.name }} && npm pack --pack-destination "$RUNNER_TEMP/pkgs")
+      - name: Install from the tarballs and run the agent memory session
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/app" && cd "$RUNNER_TEMP/app"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$RUNNER_TEMP"/pkgs/graphlava-node-${{ matrix.name }}-*.tgz "$RUNNER_TEMP"/pkgs/graphlava-node-0*.tgz
+          node "$GITHUB_WORKSPACE/bindings/node/test-support/smoke.mjs"
+
+  bench:
+    name: nightly Binding overhead (Node)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # The fixed Linux x86_64 nightly runner of adr 0020.
+    runs-on: [self-hosted, linux, x64, bench]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: npm run build
+      - name: Binding overhead (1M statements, props(), event-loop delay)
+        run: node bench/overhead.mjs --statements 1000000 --out "$RUNNER_TEMP/node-overhead.json"
+      - name: Gate against the stored baseline (+20% p50 at 95% confidence)
+        run: node bench/gate.mjs --baseline ../../bench/baselines/binding-overhead-node.json --run "$RUNNER_TEMP/node-overhead.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-overhead
+          path: ${{ runner.temp }}/node-overhead.json
