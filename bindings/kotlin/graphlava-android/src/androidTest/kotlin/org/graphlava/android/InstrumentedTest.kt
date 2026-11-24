@@ -7,7 +7,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.util.concurrent.CountDownLatch
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.graphlava.Database
 import org.graphlava.Durability
@@ -39,9 +38,14 @@ class InstrumentedTest {
         db.close()
         db = Database.open(path)
         val q = "PREFIX : <http://ex.org/> SELECT ?r ?c WHERE { << :alice :worksAt :acme ~ ?r >> . ?r :confidence ?c }"
-        val b = db.query(q).first()
-        assertEquals("0.9", (b.term(0, "c") as Term.Literal).lexical)
-        assertEquals(works, b[0, 0])
+        // Batches decode only while the flow is collected.
+        var seen = 0
+        db.query(q).collect { b ->
+            assertEquals("0.9", (b.term(0, "c") as Term.Literal).lexical)
+            assertEquals(works, b[0, 0])
+            seen += b.count
+        }
+        assertEquals(1, seen)
         db.close()
     }
 

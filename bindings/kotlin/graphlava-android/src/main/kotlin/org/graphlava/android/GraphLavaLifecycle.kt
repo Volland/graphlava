@@ -2,6 +2,7 @@ package org.graphlava.android
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.os.Handler
 import android.os.Looper
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -23,7 +24,11 @@ import org.graphlava.Database
 object GraphLavaLifecycle {
     private val scope = CoroutineScope(SupervisorJob() + Database.writer)
 
-    /** Call once from `Application.onCreate` (main thread). */
+    /**
+     * Call once after opening, from any thread. The lifecycle observer is
+     * added on the main thread, as `Lifecycle.addObserver` requires: directly
+     * when called there, otherwise posted to the main looper.
+     */
     fun install(context: Context, db: Database): DefaultLifecycleObserver {
         if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             Database.mainThreadGuard = { Looper.myLooper() == Looper.getMainLooper() }
@@ -33,7 +38,8 @@ object GraphLavaLifecycle {
                 scope.launch { runCatching { db.flush() } }
             }
         }
-        ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+        val add = { ProcessLifecycleOwner.get().lifecycle.addObserver(observer) }
+        if (Looper.myLooper() == Looper.getMainLooper()) add() else Handler(Looper.getMainLooper()).post(add)
         return observer
     }
 }
