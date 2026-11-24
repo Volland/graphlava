@@ -1,0 +1,64 @@
+name: Pages
+
+# Publishes site/ to GitHub Pages at https://graphlava.org (custom domain from site/CNAME).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check internal links
+        run: |
+          python3 - <<'PY'
+          import os, sys, html.parser
+          class P(html.parser.HTMLParser):
+              def __init__(s): super().__init__(); s.links = []; s.ids = set()
+              def handle_starttag(s, t, a):
+                  a = dict(a)
+                  if a.get("id"): s.ids.add(a["id"])
+                  for k in ("href", "src"):
+                      if a.get(k): s.links.append(a[k])
+          pages = {}
+          for root, _, files in os.walk("site"):
+              for f in files:
+                  if f.endswith(".html"):
+                      p = os.path.normpath(os.path.join(root, f)); x = P(); x.feed(open(p, encoding="utf-8").read()); pages[p] = x
+          bad = []
+          for p, x in pages.items():
+              for l in x.links:
+                  if l.startswith(("http:", "https:", "mailto:")): continue
+                  path, _, frag = l.partition("#")
+                  base = "site" if path.startswith("/") else os.path.dirname(p)
+                  path = path.lstrip("/")
+                  t = p if not path else os.path.normpath(os.path.join(base, path))
+                  if os.path.isdir(t): t = os.path.join(t, "index.html")
+                  if not os.path.exists(t): bad.append(f"{p}: {l}")
+                  elif frag and t.endswith(".html") and frag not in pages[os.path.normpath(t)].ids: bad.append(f"{p}: {l} (anchor)")
+          print(f"{len(pages)} pages checked")
+          if bad: print("\n".join(bad)); sys.exit(1)
+          PY
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
