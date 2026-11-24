@@ -15,6 +15,16 @@ The static website for graphlava: plain HTML and one stylesheet. No build step, 
 
 Preview locally: `python3 -m http.server -d site 8000`, then open http://localhost:8000.
 
-Deploy: publish this folder as the site root, for example GitHub Pages from a workflow that uploads `site/`, or Cloudflare Pages with `site` as the output directory and no build command.
+Deploy: every push to `main` that touches `site/` runs [.github/workflows/pages.yml](../.github/workflows/pages.yml). It checks all internal links, uploads this folder and publishes it with GitHub Pages (source: GitHub Actions, custom domain `graphlava.org`). It can also be run by hand from the Actions tab.
+
+DNS for `graphlava.org` (Cloudflare, DNS only, proxy off):
+
+| Type | Name | Content |
+| --- | --- | --- |
+| A | `@` | `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153` (four records) |
+| AAAA | `@` | `2606:50c0:8000::153`, `2606:50c0:8001::153`, `2606:50c0:8002::153`, `2606:50c0:8003::153` (four records) |
+| CNAME | `www` | `volland.github.io` |
+
+Once DNS resolves and GitHub has issued the certificate, turn on "Enforce HTTPS" in Settings → Pages.
 
 Palette: crust `#3a2208`, honey `#f2b84b`, pastry `#c9852c`, syrup `#a96a1e`, pistachio `#8cc43f`, cream `#fff3d6`.
