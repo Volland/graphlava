@@ -36,7 +36,7 @@
     <img src="assets/logo.svg" alt="The graphlava logo: a diamond of baklava with pastry layers on its sides and, on top, four nodes joined to a pistachio in the centre.">
   </div>
 
-  <p class="status"><strong>Status: design.</strong> The specifications, 41 decision records and the Rust workspace with CI for Linux, macOS, Windows, iOS and Android exist. The engine does not exist yet: nothing on this site can be downloaded and run today.</p>
+  <p class="status"><strong>Status: early implementation.</strong> The specifications, 41 decision records, a Lean 4 model of the store and the Rust workspace with CI for Linux, macOS, Windows, iOS and Android exist. The store core (term identity, statements, transactions on redb) is implemented; the query surfaces are not, and nothing is published to install yet.</p>
 
   <section id="model">
     <h2>One piece, four layers</h2>
@@ -91,7 +91,7 @@ ancestor(?x, ?z) :- ancestor(?x, ?y), :parent(?y, ?z) .
       <tr><td>Change a fact</td><td><code>update(id, o)</code>, same ID</td><td><code>supersede</code>, a new statement that replays its layers</td></tr>
       <tr><td>n-ary relations</td><td>Native hyperedge records</td><td>A node with role statements, or an annotated edge</td></tr>
       <tr><td>Storage</td><td>redb</td><td>SQLite (default) or redb</td></tr>
-      <tr><td>Status</td><td>Design</td><td>Released, 0.12</td></tr>
+      <tr><td>Status</td><td>Early implementation</td><td>Released, 0.12</td></tr>
     </table></div>
     <p>More in <a href="articles/graphlava-and-tiramemsu.html">graphlava and tiramemsu</a>.</p>
   </section>
