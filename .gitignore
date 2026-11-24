@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+.DS_Store
+
+# local agent/tool state
+/.omc/
+.claude/settings.local.json
+.tg/
+graphify-out/

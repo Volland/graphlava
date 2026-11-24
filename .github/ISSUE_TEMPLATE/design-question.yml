@@ -1,0 +1,9 @@
+name: Design question
+description: An open design question or a challenge to a decision
+labels: [design]
+body:
+  - type: textarea
+    attributes: { label: Question, description: "Which spec, ADR or open question does this concern?" }
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: Options considered }

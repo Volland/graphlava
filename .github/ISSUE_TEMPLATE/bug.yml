@@ -1,0 +1,9 @@
+name: Bug report
+description: Something behaves differently from the spec
+labels: [bug]
+body:
+  - type: textarea
+    attributes: { label: What happened, description: "Include platform, version and a minimal repro." }
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: What you expected, description: "Link the spec section if there is one (tg.md/...)." }
