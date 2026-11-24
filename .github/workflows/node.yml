@@ -48,8 +48,8 @@ jobs:
           - { target: x86_64-unknown-linux-gnu, name: linux-x64-gnu, os: ubuntu-22.04 }
           - { target: aarch64-unknown-linux-gnu, name: linux-arm64-gnu, os: ubuntu-22.04-arm }
           - { target: x86_64-unknown-linux-musl, name: linux-x64-musl, os: ubuntu-22.04, zig: true }
-          - { target: aarch64-apple-darwin, name: darwin-arm64, os: macos-14 }
-          - { target: x86_64-apple-darwin, name: darwin-x64, os: macos-13 }
+          - { target: aarch64-apple-darwin, name: darwin-arm64, os: macos-latest }
+          - { target: x86_64-apple-darwin, name: darwin-x64, os: macos-15-intel }
           - { target: x86_64-pc-windows-msvc, name: win32-x64-msvc, os: windows-latest }
     runs-on: ${{ matrix.os }}
     steps:
@@ -95,8 +95,8 @@ jobs:
         include:
           - { name: linux-x64-gnu, os: ubuntu-22.04 }
           - { name: linux-arm64-gnu, os: ubuntu-22.04-arm }
-          - { name: darwin-arm64, os: macos-14 }
-          - { name: darwin-x64, os: macos-13 }
+          - { name: darwin-arm64, os: macos-latest }
+          - { name: darwin-x64, os: macos-15-intel }
           - { name: win32-x64-msvc, os: windows-latest }
     runs-on: ${{ matrix.os }}
     steps:
@@ -146,8 +146,8 @@ jobs:
           - { name: linux-x64-gnu, os: ubuntu-22.04 }
           - { name: linux-arm64-gnu, os: ubuntu-22.04-arm }
           - { name: linux-x64-musl, os: ubuntu-22.04, container: true }
-          - { name: darwin-arm64, os: macos-14 }
-          - { name: darwin-x64, os: macos-13 }
+          - { name: darwin-arm64, os: macos-latest }
+          - { name: darwin-x64, os: macos-15-intel }
           - { name: win32-x64-msvc, os: windows-latest }
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container && format('node:{0}-alpine', matrix.node) || null }}
