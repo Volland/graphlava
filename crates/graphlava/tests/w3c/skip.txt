@@ -1,0 +1,30 @@
+# W3C SPARQL conformance skip list (rule sparql-conf-11, tg.md/11-sparql.md#Conformance).
+# One test IRI per line, then the reason. The runner (tests/w3c.rs) fails on any
+# failing test not listed here and on any listed test that passes.
+# Changing this list is a reviewed change.
+
+http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bindings/manifest#values-construct-group-by  parser: spargebra 0.4 rejects a VALUES clause after GROUP BY in a CONSTRUCT query
+http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#hours  storage: xsd:dateTime literals are stored normalised to UTC, so the -08:00 timezone of the data is lost
+http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#timezone  storage: xsd:dateTime literals are stored normalised to UTC, so the -08:00 timezone of the data is lost
+http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#tz  storage: xsd:dateTime literals are stored normalised to UTC, so the -08:00 timezone of the data is lost
+https://w3c.github.io/rdf-tests/sparql/sparql12/grouping/manifest#group01  storage: numeric literals are canonicalised on storage ("01" and "1" are one term; test requires mf:NoCanonicalizationOfNumerics)
+https://w3c.github.io/rdf-tests/sparql/sparql12/grouping/manifest#select-variable-reuse  parser: spargebra 0.4 rejects reuse of a SELECT expression variable in an aggregating query
+https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-negative/manifest#tripleterm-subject-03  parser: spargebra 0.4 accepts a triple term in subject position
+https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-negative/manifest#tripleterm-subject-06  parser: spargebra 0.4 accepts a triple term in subject position
+https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#results-reifiedtriples-1j  triple terms: several reifiers of one triple are one statement ID (rule sparql-reifier-unique), so distinct reifiers and their rdf:reifies triples collapse into one
+https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#results-reifiedtriples-1x  triple terms: several reifiers of one triple are one statement ID (rule sparql-reifier-unique), so distinct reifiers and their rdf:reifies triples collapse into one
+https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-1  triple terms: several reifiers of one triple are one statement ID (rule sparql-reifier-unique), so distinct reifiers and their rdf:reifies triples collapse into one
+https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-2  triple terms: several reifiers of one triple are one statement ID (rule sparql-reifier-unique), so distinct reifiers and their rdf:reifies triples collapse into one
+https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-3  triple terms: a reifier in object position is the statement ID, which standard mode reads as the triple term, not as the reifier term (rule sparql-reifier-is-id)
+https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-3-nomatch  triple terms: several reifiers of one triple are one statement ID (rule sparql-reifier-unique), so distinct reifiers and their rdf:reifies triples collapse into one
+https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-8-nomatch  triple terms: several reifiers of one triple are one statement ID (rule sparql-reifier-unique), so distinct reifiers and their rdf:reifies triples collapse into one
+https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#op-1  triple terms: several reifiers of one triple are one statement ID (rule sparql-reifier-unique), so distinct reifiers and their rdf:reifies triples collapse into one; a reifier in object position is the statement ID, which standard mode reads as the triple term, not as the reifier term (rule sparql-reifier-is-id)
+https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#update-3  delete cascade: DELETE DATA of an annotated statement deletes its annotations (rule sparql-dev-delete-cascade) instead of keeping the reifier
+https://w3c.github.io/rdf-tests/sparql/sparql12/expression/manifest#triple-on-str-literals  base direction: literals carry no base direction (rdf:dirLangString, LANGDIR, STRLANGDIR unsupported)
+https://w3c.github.io/rdf-tests/sparql/sparql12/lang-basedir/manifest#haslangdir  base direction: literals carry no base direction (rdf:dirLangString, LANGDIR, STRLANGDIR unsupported)
+https://w3c.github.io/rdf-tests/sparql/sparql12/lang-basedir/manifest#langdir  base direction: literals carry no base direction (rdf:dirLangString, LANGDIR, STRLANGDIR unsupported)
+https://w3c.github.io/rdf-tests/sparql/sparql12/lang-basedir/manifest#langdir-literal  base direction: literals carry no base direction (rdf:dirLangString, LANGDIR, STRLANGDIR unsupported)
+https://w3c.github.io/rdf-tests/sparql/sparql12/lang-basedir/manifest#strlangdir  base direction: literals carry no base direction (rdf:dirLangString, LANGDIR, STRLANGDIR unsupported)
+https://w3c.github.io/rdf-tests/sparql/sparql12/lang-basedir/manifest#datatype  base direction: literals carry no base direction (rdf:dirLangString, LANGDIR, STRLANGDIR unsupported)
+https://w3c.github.io/rdf-tests/sparql/sparql12/lang-basedir/manifest#concat  base direction: literals carry no base direction (rdf:dirLangString, LANGDIR, STRLANGDIR unsupported)
+https://w3c.github.io/rdf-tests/sparql/sparql12/syntax/manifest#nested-aggregate-functions  parser: spargebra 0.4 accepts nested aggregate functions
