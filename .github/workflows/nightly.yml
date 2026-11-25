@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # [[21-e2e-tests#Soak against the model]]: about 10^6 statements,
@@ -35,9 +35,9 @@ jobs:
     runs-on: [self-hosted, graphlava-bench]
     timeout-minutes: 600
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: bench/scripts/nightly.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bench-results
           path: bench/results/*.json
