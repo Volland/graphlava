@@ -32,7 +32,7 @@ jobs:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.88"
@@ -53,8 +53,8 @@ jobs:
           - { target: x86_64-pc-windows-msvc, name: win32-x64-msvc, os: windows-latest }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
@@ -63,7 +63,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: node-${{ matrix.target }}
-      - uses: mlugg/setup-zig@v1
+      - uses: mlugg/setup-zig@v2
         if: matrix.zig
         with:
           version: 0.13.0
@@ -81,7 +81,7 @@ jobs:
             npx napi build --platform --release --target ${{ matrix.target }} \
               --manifest-path ../../crates/graphlava-node/Cargo.toml --output-dir . --no-js --dts lib/native.d.ts
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bindings-${{ matrix.name }}
           path: bindings/node/graphlava.${{ matrix.name }}.node
@@ -103,15 +103,15 @@ jobs:
           - { name: win32-x64-msvc, os: windows-latest }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
       # npm 11 `npm ci` refuses a lockfile without the per-target packages,
       # which are not on the registry until the first publish; `npm install`
       # still honours the lockfile for everything else.
       - run: npm install --no-audit --no-fund
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: bindings-${{ matrix.name }}
           path: bindings/node
@@ -132,12 +132,12 @@ jobs:
     runs-on: ubuntu-22.04
     container: node:${{ matrix.node }}-alpine
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # npm 11 `npm ci` refuses a lockfile without the per-target packages,
       # which are not on the registry until the first publish; `npm install`
       # still honours the lockfile for everything else.
       - run: npm install --no-audit --no-fund
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: bindings-linux-x64-musl
           path: bindings/node
@@ -161,8 +161,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container && format('node:{0}-alpine', matrix.node) || null }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         if: ${{ !matrix.container }}
         with:
           node-version: ${{ matrix.node }}
@@ -170,7 +170,7 @@ jobs:
         if: ${{ matrix.container }}
         shell: sh
         run: apk add --no-cache bash
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: bindings-${{ matrix.name }}
           path: bindings/node/npm/${{ matrix.name }}
@@ -208,8 +208,8 @@ jobs:
     # The fixed Linux x86_64 nightly runner of adr 0020.
     runs-on: [self-hosted, linux, x64, bench]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
@@ -222,7 +222,7 @@ jobs:
         run: node bench/overhead.mjs --statements 1000000 --out "$RUNNER_TEMP/node-overhead.json"
       - name: Gate against the stored baseline (+20% p50 at 95% confidence)
         run: node bench/gate.mjs --baseline ../../bench/baselines/binding-overhead-node.json --run "$RUNNER_TEMP/node-overhead.json"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: node-overhead
           path: ${{ runner.temp }}/node-overhead.json
