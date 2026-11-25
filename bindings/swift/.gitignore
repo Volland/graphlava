@@ -1,0 +1,4 @@
+.build/
+.swiftpm/
+GraphLavaFFI.xcframework/
+*.xcresult/

@@ -1,0 +1,199 @@
+{
+  "base": "data/crash/base-100M.redb",
+  "base_alloc": 42515595264,
+  "base_file_len": 42955001856,
+  "env": {
+    "build": "cargo --release, lto=fat, codegen-units=1, debug=1 (symbols only)",
+    "cache_state": "warm (OS page cache not dropped; `purge` needs root)",
+    "cores": "12",
+    "cpu": "Apple M2 Max",
+    "dataset": "gen-v1 (src/data.rs)",
+    "fs": "/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse, protect, root data)",
+    "graphlava_commit": "0c66e2b (+ uncommitted working tree)",
+    "kernel": "27.2.0",
+    "os": "macOS 27.2.1 (26B131)",
+    "ram_bytes": "68719476736",
+    "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "seed": 42,
+    "timestamp": "2026-11-24T18:29:29Z"
+  },
+  "experiment": "C crash repair",
+  "meta": {
+    "loaded_stmts": 100000000,
+    "n": 100000000,
+    "next_stmt": 100000000,
+    "nodes": 12500000,
+    "ords": [
+      "spo",
+      "pos",
+      "osp"
+    ],
+    "seed": 42
+  },
+  "trials": [
+    {
+      "child": {
+        "child_open_s": 4.952975041,
+        "small": {
+          "count": 50,
+          "max_us": 159252.479,
+          "mean_us": 17766.23616,
+          "p50_us": 13287.423,
+          "p999_us": 159252.479,
+          "p99_us": 159252.479
+        }
+      },
+      "mode": "clean",
+      "open_after": {
+        "first_query_found": true,
+        "first_query_s": 0.000614875,
+        "max_rss_bytes": 8929280,
+        "open_s": 0.006547583,
+        "repair_callback_calls": 0,
+        "ru_inblock": 0
+      },
+      "reopen_after_clean_close": {
+        "first_query_found": true,
+        "first_query_s": 0.0000175,
+        "max_rss_bytes": 9502720,
+        "open_s": 0.006389709,
+        "repair_callback_calls": 0,
+        "ru_inblock": 0
+      },
+      "rep": 0
+    },
+    {
+      "child": {
+        "child_open_s": 6.677383542,
+        "flush_txns": {
+          "count": 200,
+          "max_us": 287571.967,
+          "mean_us": 13315.6864,
+          "p50_us": 10985.471,
+          "p999_us": 287571.967,
+          "p99_us": 30949.375
+        },
+        "noflush_txns": {
+          "count": 200,
+          "max_us": 37683.199,
+          "mean_us": 8545.443839999998,
+          "p50_us": 6893.567,
+          "p999_us": 37683.199,
+          "p99_us": 32948.223
+        }
+      },
+      "mode": "after_flush",
+      "open_after": {
+        "first_query_found": true,
+        "first_query_s": 0.000711541,
+        "max_rss_bytes": 1304477696,
+        "open_s": 220.906510333,
+        "repair_callback_calls": 3,
+        "ru_inblock": 0
+      },
+      "reopen_after_clean_close": {
+        "first_query_found": true,
+        "first_query_s": 0.000018084,
+        "max_rss_bytes": 8929280,
+        "open_s": 0.010541875,
+        "repair_callback_calls": 0,
+        "ru_inblock": 0
+      },
+      "rep": 0
+    },
+    {
+      "child": {
+        "child_open_s": 5.469080958,
+        "flush_txns": {
+          "count": 200,
+          "max_us": 73859.071,
+          "mean_us": 31089.090560000004,
+          "p50_us": 28147.711,
+          "p999_us": 73859.071,
+          "p99_us": 69009.407
+        },
+        "noflush_txns": {
+          "count": 200,
+          "max_us": 22462.463,
+          "mean_us": 6186.832640000002,
+          "p50_us": 5525.503,
+          "p999_us": 22462.463,
+          "p99_us": 19578.879
+        }
+      },
+      "mode": "qr_after_noflush",
+      "open_after": {
+        "first_query_found": true,
+        "first_query_s": 0.000535959,
+        "max_rss_bytes": 23592960,
+        "open_s": 0.012466625,
+        "repair_callback_calls": 0,
+        "ru_inblock": 0
+      },
+      "reopen_after_clean_close": {
+        "first_query_found": true,
+        "first_query_s": 0.000014792,
+        "max_rss_bytes": 8929280,
+        "open_s": 0.011409084,
+        "repair_callback_calls": 0,
+        "ru_inblock": 0
+      },
+      "rep": 0
+    },
+    {
+      "child": {
+        "child_open_s": 5.417056875,
+        "uncommitted_stmts": 100000
+      },
+      "mode": "uncommitted_big",
+      "open_after": {
+        "first_query_found": true,
+        "first_query_s": 0.000227875,
+        "max_rss_bytes": 1314177024,
+        "open_s": 201.704563458,
+        "repair_callback_calls": 3,
+        "ru_inblock": 0
+      },
+      "reopen_after_clean_close": {
+        "first_query_found": true,
+        "first_query_s": 0.000017458,
+        "max_rss_bytes": 8929280,
+        "open_s": 0.006163125,
+        "repair_callback_calls": 0,
+        "ru_inblock": 0
+      },
+      "rep": 0
+    },
+    {
+      "child": {
+        "child_open_s": 5.823194709,
+        "noflush_txns": {
+          "count": 200,
+          "max_us": 36634.623,
+          "mean_us": 7561.20832,
+          "p50_us": 6578.175,
+          "p999_us": 36634.623,
+          "p99_us": 31440.895
+        }
+      },
+      "mode": "after_noflush",
+      "open_after": {
+        "first_query_found": true,
+        "first_query_s": 0.000023625,
+        "max_rss_bytes": 1319419904,
+        "open_s": 104.974746542,
+        "repair_callback_calls": 3,
+        "ru_inblock": 0
+      },
+      "reopen_after_clean_close": {
+        "first_query_found": true,
+        "first_query_s": 0.000023208,
+        "max_rss_bytes": 8912896,
+        "open_s": 0.006695958,
+        "repair_callback_calls": 0,
+        "ru_inblock": 0
+      },
+      "rep": 0
+    }
+  ]
+}

@@ -97,7 +97,7 @@
   <li><strong>Climb only as far as the problem needs.</strong> A binary fact that is never annotated costs the least, and graphlava is designed so that it pays for nothing else.</li>
   <li><strong>Give a relation a type when its roles are fixed.</strong> The store can then check it and read it as one record.</li>
   <li><strong>Annotate instead of encoding.</strong> A confidence belongs on the statement, not in a compound predicate or a side table.</li>
-  <li><strong>Point dependencies the way deletes flow.</strong> Annotations follow their subject into deletion. A reference from the object position does not cascade; the recommended option makes it block the delete unless <code>DETACH</code>.</li>
+  <li><strong>Point dependencies the way deletes flow.</strong> Annotations follow their subject into deletion. A reference from the object position does not cascade; it blocks the delete unless <code>DETACH</code> (ADR 0036).</li>
   <li><strong>Group with graphs, not with properties.</strong> A <code>:context</code> value on every fact cannot be nested, scoped or described. A graph can.</li>
 </ol>
 

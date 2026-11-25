@@ -1,0 +1,515 @@
+{
+  "args": {
+    "build_dur": "flush",
+    "engine": "redb",
+    "layout": "3",
+    "n": "10000000",
+    "out": "results/B-orders-redb-3-flushbuild-10000000.json",
+    "skip_writes": "1"
+  },
+  "env": {
+    "build": "cargo --release, lto=fat, codegen-units=1, debug=1 (symbols only)",
+    "cache_state": "warm (OS page cache not dropped; `purge` needs root)",
+    "cores": "12",
+    "cpu": "Apple M2 Max",
+    "dataset": "gen-v1 (src/data.rs)",
+    "fs": "/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse, protect, root data)",
+    "graphlava_commit": "d1bf69f (+ uncommitted working tree)",
+    "kernel": "27.2.0",
+    "os": "macOS 27.2.1 (26B131)",
+    "ram_bytes": "68719476736",
+    "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "seed": 42,
+    "timestamp": "2026-11-24T15:15:09Z"
+  },
+  "experiment": "B ordering count",
+  "result": {
+    "bulk_load_s": 109.260204625,
+    "cyclic": [
+      {
+        "layout": 3,
+        "plan": "Three",
+        "queries": {
+          "cyc4_anchored_p0": {
+            "count": 2000,
+            "max_us": 94.975,
+            "mean_us": 15.919533500000005,
+            "p50_us": 13.423,
+            "p999_us": 72.191,
+            "p99_us": 46.847,
+            "results": 0
+          },
+          "tri1_anchored_p0": {
+            "count": 2000,
+            "max_us": 61.471,
+            "mean_us": 11.810962500000002,
+            "p50_us": 11.007,
+            "p999_us": 42.175,
+            "p99_us": 27.263,
+            "results": 0
+          },
+          "tri_all_rare_pred": {
+            "count": 5,
+            "max_us": 172228.607,
+            "mean_us": 123351.85919999999,
+            "p50_us": 112525.311,
+            "p999_us": 172228.607,
+            "p99_us": 172228.607,
+            "results": 0
+          },
+          "tri_anypred_anchored": {
+            "count": 2000,
+            "max_us": 108.415,
+            "mean_us": 40.07424799999994,
+            "p50_us": 39.167,
+            "p999_us": 102.527,
+            "p99_us": 77.055,
+            "results": 1
+          }
+        }
+      },
+      {
+        "layout": 3,
+        "plan": "Three",
+        "queries": {
+          "cyc4_anchored_p0": {
+            "count": 2000,
+            "max_us": 134.783,
+            "mean_us": 12.288850000000002,
+            "p50_us": 10.167,
+            "p999_us": 56.479,
+            "p99_us": 37.599,
+            "results": 0
+          },
+          "tri1_anchored_p0": {
+            "count": 2000,
+            "max_us": 63.775,
+            "mean_us": 9.746969499999992,
+            "p50_us": 8.879,
+            "p999_us": 48.959,
+            "p99_us": 22.879,
+            "results": 0
+          },
+          "tri_all_rare_pred": {
+            "count": 5,
+            "max_us": 106037.247,
+            "mean_us": 103212.64640000001,
+            "p50_us": 103415.807,
+            "p999_us": 106037.247,
+            "p99_us": 106037.247,
+            "results": 0
+          },
+          "tri_anypred_anchored": {
+            "count": 2000,
+            "max_us": 112.383,
+            "mean_us": 34.142938000000015,
+            "p50_us": 33.567,
+            "p999_us": 93.055,
+            "p99_us": 63.839,
+            "results": 0
+          }
+        }
+      },
+      {
+        "layout": 3,
+        "plan": "Three",
+        "queries": {
+          "cyc4_anchored_p0": {
+            "count": 2000,
+            "max_us": 48.959,
+            "mean_us": 10.266412000000006,
+            "p50_us": 9.007,
+            "p999_us": 43.519,
+            "p99_us": 28.047,
+            "results": 0
+          },
+          "tri1_anchored_p0": {
+            "count": 2000,
+            "max_us": 25.759,
+            "mean_us": 8.126567999999997,
+            "p50_us": 7.419,
+            "p999_us": 21.551,
+            "p99_us": 17.711,
+            "results": 0
+          },
+          "tri_all_rare_pred": {
+            "count": 5,
+            "max_us": 103809.023,
+            "mean_us": 100604.31360000001,
+            "p50_us": 99549.183,
+            "p999_us": 103809.023,
+            "p99_us": 103809.023,
+            "results": 0
+          },
+          "tri_anypred_anchored": {
+            "count": 2000,
+            "max_us": 81.215,
+            "mean_us": 29.97889199999999,
+            "p50_us": 29.631,
+            "p999_us": 63.359,
+            "p99_us": 51.967,
+            "results": 1
+          }
+        }
+      },
+      {
+        "layout": 3,
+        "plan": "Three",
+        "queries": {
+          "cyc4_anchored_p0": {
+            "count": 2000,
+            "max_us": 55.967,
+            "mean_us": 11.136755,
+            "p50_us": 9.335,
+            "p999_us": 47.295,
+            "p99_us": 33.727,
+            "results": 0
+          },
+          "tri1_anchored_p0": {
+            "count": 2000,
+            "max_us": 27.471,
+            "mean_us": 8.216814000000005,
+            "p50_us": 7.627,
+            "p999_us": 24.719,
+            "p99_us": 18.335,
+            "results": 0
+          },
+          "tri_all_rare_pred": {
+            "count": 5,
+            "max_us": 101908.479,
+            "mean_us": 98100.83840000001,
+            "p50_us": 98762.751,
+            "p999_us": 101908.479,
+            "p99_us": 101908.479,
+            "results": 0
+          },
+          "tri_anypred_anchored": {
+            "count": 2000,
+            "max_us": 81.215,
+            "mean_us": 29.977232000000036,
+            "p50_us": 29.167,
+            "p999_us": 72.959,
+            "p99_us": 55.103,
+            "results": 2
+          }
+        }
+      },
+      {
+        "layout": 3,
+        "plan": "Three",
+        "queries": {
+          "cyc4_anchored_p0": {
+            "count": 2000,
+            "max_us": 42.687,
+            "mean_us": 9.918025000000004,
+            "p50_us": 8.503,
+            "p999_us": 35.007,
+            "p99_us": 28.303,
+            "results": 0
+          },
+          "tri1_anchored_p0": {
+            "count": 2000,
+            "max_us": 32.047,
+            "mean_us": 8.216126999999995,
+            "p50_us": 7.503,
+            "p999_us": 25.135,
+            "p99_us": 19.343,
+            "results": 0
+          },
+          "tri_all_rare_pred": {
+            "count": 5,
+            "max_us": 102170.623,
+            "mean_us": 96436.224,
+            "p50_us": 97910.783,
+            "p999_us": 102170.623,
+            "p99_us": 102170.623,
+            "results": 0
+          },
+          "tri_anypred_anchored": {
+            "count": 2000,
+            "max_us": 189.951,
+            "mean_us": 30.755650000000013,
+            "p50_us": 29.007,
+            "p999_us": 149.759,
+            "p99_us": 83.327,
+            "results": 2
+          }
+        }
+      },
+      {
+        "layout": "3+ondemand(pso,sop,ops)",
+        "plan": "Six",
+        "queries": {
+          "cyc4_anchored_p0": {
+            "count": 2000,
+            "max_us": 41.695,
+            "mean_us": 9.795415000000002,
+            "p50_us": 8.671,
+            "p999_us": 31.135,
+            "p99_us": 24.879,
+            "results": 0
+          },
+          "tri1_anchored_p0": {
+            "count": 2000,
+            "max_us": 168.959,
+            "mean_us": 9.120441500000002,
+            "p50_us": 8.295,
+            "p999_us": 37.055,
+            "p99_us": 20.431,
+            "results": 0
+          },
+          "tri_all_rare_pred": {
+            "count": 5,
+            "max_us": 209453.055,
+            "mean_us": 184405.1968,
+            "p50_us": 177078.271,
+            "p999_us": 209453.055,
+            "p99_us": 209453.055,
+            "results": 0
+          },
+          "tri_anypred_anchored": {
+            "count": 2000,
+            "max_us": 173.311,
+            "mean_us": 35.63265800000001,
+            "p50_us": 35.071,
+            "p999_us": 89.791,
+            "p99_us": 60.479,
+            "results": 1
+          }
+        }
+      },
+      {
+        "layout": "3+ondemand(pso,sop,ops)",
+        "plan": "Six",
+        "queries": {
+          "cyc4_anchored_p0": {
+            "count": 2000,
+            "max_us": 44.127,
+            "mean_us": 9.491810000000001,
+            "p50_us": 8.215,
+            "p999_us": 36.127,
+            "p99_us": 26.127,
+            "results": 0
+          },
+          "tri1_anchored_p0": {
+            "count": 2000,
+            "max_us": 32.959,
+            "mean_us": 8.637407500000005,
+            "p50_us": 8.043,
+            "p999_us": 24.511,
+            "p99_us": 18.463,
+            "results": 0
+          },
+          "tri_all_rare_pred": {
+            "count": 5,
+            "max_us": 190316.543,
+            "mean_us": 176829.23520000002,
+            "p50_us": 171573.247,
+            "p999_us": 190316.543,
+            "p99_us": 190316.543,
+            "results": 0
+          },
+          "tri_anypred_anchored": {
+            "count": 2000,
+            "max_us": 58.015,
+            "mean_us": 32.380366,
+            "p50_us": 32.255,
+            "p999_us": 57.855,
+            "p99_us": 51.007,
+            "results": 0
+          }
+        }
+      },
+      {
+        "layout": "3+ondemand(pso,sop,ops)",
+        "plan": "Six",
+        "queries": {
+          "cyc4_anchored_p0": {
+            "count": 2000,
+            "max_us": 34.463,
+            "mean_us": 8.417335000000005,
+            "p50_us": 7.503,
+            "p999_us": 25.919,
+            "p99_us": 21.583,
+            "results": 0
+          },
+          "tri1_anchored_p0": {
+            "count": 2000,
+            "max_us": 46.655,
+            "mean_us": 7.388948999999997,
+            "p50_us": 6.711,
+            "p999_us": 30.383,
+            "p99_us": 17.295,
+            "results": 0
+          },
+          "tri_all_rare_pred": {
+            "count": 5,
+            "max_us": 191758.335,
+            "mean_us": 179765.248,
+            "p50_us": 178257.919,
+            "p999_us": 191758.335,
+            "p99_us": 191758.335,
+            "results": 0
+          },
+          "tri_anypred_anchored": {
+            "count": 2000,
+            "max_us": 139.647,
+            "mean_us": 34.30941000000001,
+            "p50_us": 33.759,
+            "p999_us": 87.487,
+            "p99_us": 66.559,
+            "results": 1
+          }
+        }
+      },
+      {
+        "layout": "3+ondemand(pso,sop,ops)",
+        "plan": "Six",
+        "queries": {
+          "cyc4_anchored_p0": {
+            "count": 2000,
+            "max_us": 37.823,
+            "mean_us": 8.55276250000001,
+            "p50_us": 7.459,
+            "p999_us": 34.271,
+            "p99_us": 22.847,
+            "results": 0
+          },
+          "tri1_anchored_p0": {
+            "count": 2000,
+            "max_us": 36.543,
+            "mean_us": 7.062415999999998,
+            "p50_us": 6.419,
+            "p999_us": 27.263,
+            "p99_us": 16.591,
+            "results": 0
+          },
+          "tri_all_rare_pred": {
+            "count": 5,
+            "max_us": 177864.703,
+            "mean_us": 173893.2224,
+            "p50_us": 175112.191,
+            "p999_us": 177864.703,
+            "p99_us": 177864.703,
+            "results": 0
+          },
+          "tri_anypred_anchored": {
+            "count": 2000,
+            "max_us": 126.719,
+            "mean_us": 32.95514199999999,
+            "p50_us": 32.047,
+            "p999_us": 109.311,
+            "p99_us": 64.927,
+            "results": 2
+          }
+        }
+      },
+      {
+        "layout": "3+ondemand(pso,sop,ops)",
+        "plan": "Six",
+        "queries": {
+          "cyc4_anchored_p0": {
+            "count": 2000,
+            "max_us": 41.919,
+            "mean_us": 9.378292000000002,
+            "p50_us": 8.167,
+            "p999_us": 37.023,
+            "p99_us": 26.927,
+            "results": 0
+          },
+          "tri1_anchored_p0": {
+            "count": 2000,
+            "max_us": 47.583,
+            "mean_us": 7.233901500000006,
+            "p50_us": 6.583,
+            "p999_us": 24.927,
+            "p99_us": 17.295,
+            "results": 0
+          },
+          "tri_all_rare_pred": {
+            "count": 5,
+            "max_us": 180617.215,
+            "mean_us": 172425.216,
+            "p50_us": 169476.095,
+            "p999_us": 180617.215,
+            "p99_us": 180617.215,
+            "results": 0
+          },
+          "tri_anypred_anchored": {
+            "count": 2000,
+            "max_us": 72.895,
+            "mean_us": 32.98199600000001,
+            "p50_us": 32.463,
+            "p999_us": 69.183,
+            "p99_us": 60.479,
+            "results": 2
+          }
+        }
+      }
+    ],
+    "engine": "redb-2.6.4",
+    "layout": [
+      "spo",
+      "pos",
+      "osp"
+    ],
+    "online_builds": [
+      {
+        "alloc_after": 4108746752,
+        "alloc_before": 4108746752,
+        "batch": 100000,
+        "batch_durability": "Flush",
+        "batches": 100,
+        "disk_bytes_written": 2163769344,
+        "entries": 10000000,
+        "file_len_after": 4295503872,
+        "file_len_before": 4295503872,
+        "growth_bytes_alloc": 0,
+        "target": "pso",
+        "wall_s": 13.914766
+      },
+      {
+        "alloc_after": 4108763136,
+        "alloc_before": 4108746752,
+        "batch": 100000,
+        "batch_durability": "Flush",
+        "batches": 100,
+        "disk_bytes_written": 1247789056,
+        "entries": 10000000,
+        "file_len_after": 4295503872,
+        "file_len_before": 4295503872,
+        "growth_bytes_alloc": 16384,
+        "target": "sop",
+        "wall_s": 12.574643791
+      },
+      {
+        "alloc_after": 4830085120,
+        "alloc_before": 4108763136,
+        "batch": 100000,
+        "batch_durability": "Flush",
+        "batches": 100,
+        "disk_bytes_written": 39556808704,
+        "entries": 10000000,
+        "file_len_after": 6447513600,
+        "file_len_before": 4295503872,
+        "growth_bytes_alloc": 721321984,
+        "target": "ops",
+        "wall_s": 83.318330709
+      }
+    ],
+    "size_after_builds": {
+      "alloc_bytes": 4830085120,
+      "bytes_per_stmt_alloc": 483.008512,
+      "bytes_per_stmt_len": 644.75136,
+      "file_len": 6447513600,
+      "live_stmts_approx": 10000000
+    },
+    "size_after_load": {
+      "alloc_bytes": 4108746752,
+      "bytes_per_stmt_alloc": 410.8746752,
+      "bytes_per_stmt_len": 429.5503872,
+      "file_len": 4295503872,
+      "live_stmts_approx": 10000000
+    }
+  }
+}

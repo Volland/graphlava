@@ -46,3 +46,5 @@ Cyclic patterns whose best variable order needs a missing ordering run slower un
 Amends handover D8 and section 4. Same on-demand principle as value indexes in [ADR-0005](0005-inline-properties-routing.md).
 
 Amended by [ADR-0027](0027-join-kernels.md) (2026-11-24): the planner's default join for selective acyclic patterns is an index nested-loop join, which is what lets three orderings serve 2–3 hop traversals.
+
+Confirmed by the engine bake-off (2026-11-24): three orderings are 38.8% smaller, write 40% faster at relaxed durability, and match six orderings on cyclic queries. The 30% write-latency bar is waived for `sync` writes, where one full fsync dominates (2-12% lower). See `tg.md/22-implementation-decisions.md`, section "Engine bake-off outcome".

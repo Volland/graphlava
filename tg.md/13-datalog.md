@@ -22,13 +22,13 @@ The engine is built in-house (handover D15). It borrows: the Nemo rule syntax (I
 
 <non-goal>
 
-No inventing a new Datalog dialect, no existential rules (Nemo's `!`-variables) in v0, and no Datalog-over-history: meta-core has no time dimension.
+No inventing a new Datalog dialect, no existential rules (Nemo's `!`-variables) in v0, and no Datalog-over-history: graphlava has no time dimension.
 
 </non-goal>
 
 ## Surface syntax
 
-Nemo-compatible syntax with an RDF-aware data model. Where Nemo has a construct, meta-core uses the same spelling; extensions are annotations, never new punctuation.
+Nemo-compatible syntax with an RDF-aware data model. Where Nemo has a construct, graphlava uses the same spelling; extensions are annotations, never new punctuation.
 
 | Construct | Syntax | Notes |
 | --- | --- | --- |
@@ -41,12 +41,12 @@ Nemo-compatible syntax with an RDF-aware data model. Where Nemo has a construct,
 | Store relations | `triple(?s, ?p, ?o)`, `triple(?s, ?p, ?o, ?id)`, `prop`, `role`, `in`, `in_star` | the virtual relations of [[10-ir#Virtual relations]] |
 | Predicate as relation | `:knows(?x, ?y)` | shorthand for `triple(?x, :knows, ?y)` |
 | Output | `@output reach .` | Nemo output declaration |
-| Query | `?- reach(:alice, ?y) .` | meta-core extension for interactive queries |
+| Query | `?- reach(:alice, ?y) .` | graphlava extension for interactive queries |
 | Rule annotation | `@materialized`, `@materialized(force)`, `@on_demand` | before a rule or a predicate declaration |
 
 <rule id="dl-nemo-compatible" strength="must">
 
-A Nemo program that uses only facts, rules, stratified negation, aggregation and built-ins that meta-core supports parses and gives the same results in meta-core, apart from data import directives (`@import`), which are replaced by reading the store.
+A Nemo program that uses only facts, rules, stratified negation, aggregation and built-ins that graphlava supports parses and gives the same results in graphlava, apart from data import directives (`@import`), which are replaced by reading the store.
 
 </rule>
 
@@ -121,7 +121,7 @@ Facts in a Datalog program can be asserted into base data, not only into derived
 
 <rule id="dl-write-base" strength="should">
 
-A fact or rule head whose predicate is a store predicate (`triple(…)` or `:p(…)`) and that is marked as an assertion inserts base statements in a write transaction. Base writes are ordinary statements with IDs, unlike derived facts ([[adr:0009]]); the marking syntax is decided in [[open-questions#Datalog writes to base data]].
+A fact or rule head whose predicate is a store predicate (`triple(…)` or `:p(…)`) and that is marked as an assertion inserts base statements in a write transaction. Base writes are ordinary statements with IDs, unlike derived facts ([[adr:0009]]); the marking is the `@assert` directive ([[adr:0040]]). Programs accept Nemo `@output` and a `?- goal.` shorthand that compiles to it.
 
 </rule>
 
@@ -281,7 +281,5 @@ Tests that check the engine against a reference and that maintenance always agre
 
 Questions this spec leaves open; each is an `OpenQuestion` in the open-questions file.
 
-- [[open-questions#Datalog writes to base data]]: the syntax and semantics of asserting base facts from a program.
 - [[open-questions#Hot predicate threshold]]: how overwrite rate is measured and what threshold makes a predicate unstable.
 - [[open-questions#Maintenance budget default]]: the default per-transaction budget and whether it is per rule or per transaction.
-- [[open-questions#Datalog query syntax]]: whether `?-` queries are accepted or only Nemo `@output`.

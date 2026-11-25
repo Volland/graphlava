@@ -47,7 +47,7 @@ INSERT DATA {
   ?r :confidence ?c ; :source ?src .
   FILTER(?c &gt; 0.8)
 }</code></pre>
-<p>The spec's plan for the first two patterns is one scan of the <code>:worksAt</code> statements and one read of the property record. Reifiers come back to clients as IRIs, <code>&lt;urn:meta-core:stmt:{id}&gt;</code>, which can be used in later requests (recommended; the form is still open).</p>
+<p>The spec's plan for the first two patterns is one scan of the <code>:worksAt</code> statements and one read of the property record. Reifiers come back to clients as IRIs, <code>&lt;https://graphlava.org/ns/stmt/{id}&gt;</code>, which can be used in later requests (ADR 0031).</p>
 
 <h2>Annotations of annotations</h2>
 <p>An annotation has an ID too, so it can be annotated. Carol checked the source:</p>
@@ -98,19 +98,19 @@ INSERT DATA { :alice :age 34 {| :source :hrRecord |} . }</code></pre>
   <tr><td><code>KEEP ANNOTATIONS</code> after <code>DELETE</code></td><td>Only the item goes; annotations stay with a dangling subject</td></tr>
   <tr><td>The item fills a hyperedge role</td><td>Fails with <code>ReferencedByHyperedge</code> unless <code>DETACH</code></td></tr>
   <tr><td>More than the cascade limit (default 100,000)</td><td>Fails with <code>CascadeLimitExceeded</code> and rolls back</td></tr>
-  <tr><td>Another statement has the item as <em>object</em></td><td>Not an annotation. Undecided in the spec; the recommended option blocks the delete unless <code>DETACH</code>, so no dangling object is created</td></tr>
+  <tr><td>Another statement has the item as <em>object</em></td><td>Not an annotation. The delete fails unless <code>DETACH</code> (ADR 0036), so no dangling object is created</td></tr>
 </table></div>
 <p>IDs are never reused, so an annotation kept with <code>KEEP ANNOTATIONS</code> can never end up pointing at a new, unrelated statement.</p>
 
 <h2>One reifier per triple</h2>
-<p>By default a predicate allows at most one statement per <code>(s, p, o)</code>. Inserting an existing triple returns its ID and changes nothing. So a triple has exactly one reifier, its ID. RDF 1.2 allows several reifiers for one triple, each with its own annotations; graphlava's recommended answer is that a second reifier IRI becomes an alias of the same ID. This is an open question in the spec, gated on v0.</p>
+<p>By default a predicate allows at most one statement per <code>(s, p, o)</code>. Inserting an existing triple returns its ID and changes nothing. So a triple has exactly one reifier, its ID. RDF 1.2 allows several reifiers for one triple, each with its own annotations; graphlava's answer is that a second reifier IRI becomes an alias of the same ID (ADR 0032).</p>
 <p>When you need several occurrences of one triple, declare the predicate <code>multi</code>. Alice met Bob twice, and each meeting has its own date:</p>
 <pre><code><span class="c"># with :met declared multi, each reifier names its own statement</span>
 INSERT DATA {
   :alice :met :bob ~ _:m1 {| :when "2026-11-20"^^xsd:date |} .
   :alice :met :bob ~ _:m2 {| :when "2026-11-27"^^xsd:date |} .
 }</code></pre>
-<p>Whether a reifier may point at a triple that is not asserted, as RDF 1.2 allows for quotes and claims, is also open; the recommended option stores it with an <code>unasserted</code> flag that normal matching skips.</p>
+<p>Whether a reifier may point at a triple that is not asserted, as RDF 1.2 allows for quotes and claims, is allowed: it creates a statement with an <code>unasserted</code> flag that normal pattern matching does not see (ADR 0032).</p>
 
 <h2>The epistemic layer</h2>
 <p>An agent needs to know what it knows, and how. In statement terms, that layer is made of three patterns:</p>
@@ -118,12 +118,12 @@ INSERT DATA {
   <tr><th>Pattern</th><th>Shape</th><th>Stored as</th><th>On delete of <code>s1</code></th></tr>
   <tr><td>Confidence</td><td><code>(s1, :confidence, 0.9)</code></td><td>inline property of <code>s1</code></td><td>goes with it</td></tr>
   <tr><td>Source</td><td><code>(s1, :source, :chat12)</code></td><td>statement in the orderings</td><td>goes with it</td></tr>
-  <tr><td>Belief that rests on a fact</td><td><code>(:belief7, :supportedBy, s1)</code></td><td>statement; <code>s1</code> is the <em>object</em></td><td>not a cascade; the recommended option blocks the delete unless <code>DETACH</code></td></tr>
+  <tr><td>Belief that rests on a fact</td><td><code>(:belief7, :supportedBy, s1)</code></td><td>statement; <code>s1</code> is the <em>object</em></td><td>not a cascade; the delete fails unless <code>DETACH</code> (ADR 0036)</td></tr>
 </table></div>
-<p>The last row matters. Under the recommended option, deleting the evidence fails while a belief still points at it. Put the dependency the right way round: if a belief should fall with its evidence, make the belief's link an annotation of the evidence, <code>(s1, :supports, :belief7)</code>, or let a Datalog rule derive the belief (chapter 9), so it is recomputed when its premises change.</p>
+<p>The last row matters. Deleting the evidence fails while a belief still points at it. Put the dependency the right way round: if a belief should fall with its evidence, make the belief's link an annotation of the evidence, <code>(s1, :supports, :belief7)</code>, or let a Datalog rule derive the belief (chapter 9), so it is recomputed when its premises change.</p>
 
 <div class="note">
-<p><strong>In graphlava.</strong> An annotation is a statement whose subject is a statement ID, stored by the same routing rule as any statement. The statement ID is the SPARQL reifier. Inline properties, hyperedge roles, memberships and derived facts are statements with no ID until annotated. Deleting a statement cascades to its annotations; a reference from the object position does not cascade, and the recommended option blocks the delete unless <code>DETACH</code>. A predicate declared <code>functional</code> updates in place on <code>set</code>, keeping ID and annotations.</p>
+<p><strong>In graphlava.</strong> An annotation is a statement whose subject is a statement ID, stored by the same routing rule as any statement. The statement ID is the SPARQL reifier. Inline properties, hyperedge roles, memberships and derived facts are statements with no ID until annotated. Deleting a statement cascades to its annotations; a reference from the object position does not cascade, and blocks the delete unless <code>DETACH</code>. A predicate declared <code>functional</code> updates in place on <code>set</code>, keeping ID and annotations.</p>
 </div>
 
 <h2>Takeaways</h2>

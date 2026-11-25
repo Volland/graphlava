@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "lib": ["ES2022", "ESNext.Disposable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "skipLibCheck": false,
+    "paths": {
+      "@graphlava/node": ["../index.d.ts"],
+      "@graphlava/node/sync": ["../sync.d.ts"]
+    }
+  },
+  "include": ["*.ts", "../index.d.ts", "../sync.d.ts"]
+}

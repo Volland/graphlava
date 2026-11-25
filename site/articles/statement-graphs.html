@@ -38,7 +38,7 @@
     <li><strong>LPG image:</strong> edge statements between nodes, label statements and property statements. Label and property statements cannot be referenced by anything.</li>
     <li><strong>OneGraph image:</strong> a mix of the RDF-star and LPG images in one graph, with duplicate statements allowed.</li>
   </ul>
-  <p>The model formalises Amazon's OneGraph (1G) idea, which we look at in <a href="graphlava-and-neptune.html">a separate article</a>. The paper is clear that it is a logical model. It says nothing about how a store should lay statements out on disk. graphlava (working name <code>meta-core</code> in the specs) is one answer to that question, tuned for agent memory.</p>
+  <p>The model formalises Amazon's OneGraph (1G) idea, which we look at in <a href="graphlava-and-neptune.html">a separate article</a>. The paper is clear that it is a logical model. It says nothing about how a store should lay statements out on disk. graphlava is one answer to that question, tuned for agent memory.</p>
 
   <figure>
     <svg viewBox="0 0 680 250" role="img" aria-label="Left: a statement vertex #42 with subject, predicate and object edges to alice, worksAt and acme, and an annotation vertex #77 whose subject is #42. Right: the same in graphlava, one stmt record for #42 and the confidence stored inline in the property record of #42.">
@@ -82,7 +82,7 @@
 DELETE { &lt;&lt; :alice :worksAt ?old ~ ?r &gt;&gt; }
 INSERT { &lt;&lt; :alice :worksAt :globex ~ ?r &gt;&gt; }
 WHERE  { &lt;&lt; :alice :worksAt ?old ~ ?r &gt;&gt; }</code></pre>
-  <p>The reifier <code>?r</code> in SPARQL 1.2 is the statement ID. Binding it costs nothing extra in a scan, and <code>rdf:reifies</code> is never stored. The spec recommends returning it to clients as an IRI of the form <code>urn:meta-core:stmt:{id}</code>; the exact form is still open.</p>
+  <p>The reifier <code>?r</code> in SPARQL 1.2 is the statement ID. Binding it costs nothing extra in a scan, and <code>rdf:reifies</code> is never stored. Clients see it as an IRI of the form <code>https://graphlava.org/ns/stmt/{id}</code> (ADR 0031). Each statement has exactly one reifier: a second reifier IRI for the same triple becomes an alias of the same ID (ADR 0032).</p>
   <p>A predicate can also be declared <code>functional</code> in the meta-model (ADR 0028): at most one object per subject. Then a plain <code>INSERT DATA { :alice :worksAt :globex }</code> updates the existing statement in place as well, and the planner can treat <code>(s, p)</code> as a key.</p>
 
   <h2>Sets by default, duplicates on request</h2>
@@ -126,7 +126,7 @@ INSERT DATA { :alice :name "Alice" {| :source :chat17 |} }</code></pre>
     <li><strong>Formal images and mappings.</strong> The paper defines exact images for RDF, RDF-star and property graphs, and mappings between them. graphlava's mapping between SPARQL and Cypher is a table in its specs, to be checked by cross-surface tests. A Lean model of the core is in progress, not a proof of the RDF and LPG mappings.</li>
     <li><strong>Acyclicity by definition.</strong> Statement graphs forbid cycles, which keeps reasoning simple. graphlava rejects cycles in graph nesting, and an annotation can only point at a statement that already exists, but the specs do not state a general acyclicity guarantee for object-position references.</li>
     <li><strong>Layout freedom.</strong> A logical model can be laid out any way an engine likes. graphlava commits to one: redb tables, three base orderings, chunked IDs.</li>
-    <li><strong>Maturity.</strong> The model has a published paper and an industrial lineage in Amazon Neptune. graphlava is a set of specs, decision records and a Rust workspace. No engine code runs yet, and every performance claim in its specs reads "to be measured".</li>
+    <li><strong>Maturity.</strong> The model has a published paper and an industrial lineage in Amazon Neptune. graphlava has specs, decision records and a store core in Rust. Its query surfaces are not built yet, and every performance claim in its specs reads "to be measured".</li>
   </ul>
   <p>What graphlava adds is a set of physical decisions: one 64-bit ID per item with a kind tag, IDs that survive updates, sets by default and duplicates per predicate, identity only where it is used, deletes that follow subject edges, n-ary records, and nested graphs that cost nothing per member. The logical picture stays the statement graph.</p>
 

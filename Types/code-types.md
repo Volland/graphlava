@@ -96,7 +96,7 @@ edgeTypes:
     to: [Requirement, Scenario]
     properties:
       since: {kind: text, description: Version or date from which it holds.}
-      level: {values: [unit, integration, e2e, manual], description: How the test runs.}
+      level: {values: [unit, property, refinement, integration, e2e, crash, conformance, benchmark, manual], description: How the test runs; the assurance levels of tg.md/19-verification.md.}
   supersedes:
     description: Replaces an older decision, which stays as history.
     from: Decision
