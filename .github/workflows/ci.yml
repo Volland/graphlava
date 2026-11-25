@@ -41,16 +41,27 @@ jobs:
       - run: cargo test --workspace --locked
       - run: cargo build --workspace --release --locked
 
+  ffi-header:
+    name: C header is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cbindgen --locked
+      - run: GRAPHLAVA_REQUIRE_CBINDGEN=1 cargo test -p graphlava-ffi --locked --test header
+
   msrv:
-    name: MSRV (1.85)
+    name: MSRV (1.87)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.85"
+          toolchain: "1.87"
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --locked
+      # graphlava-node needs Rust 1.88 (napi 3); its own MSRV is checked in node.yml.
+      - run: cargo check --workspace --exclude graphlava-node --locked
 
   ios:
     name: iOS build
@@ -67,7 +78,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-      - run: cargo build -p meta-core-ffi --release --locked --target ${{ matrix.target }}
+      - run: cargo build -p graphlava-ffi --release --locked --target ${{ matrix.target }}
 
   android:
     name: Android build
@@ -91,10 +102,10 @@ jobs:
           RUSTFLAGS: -D warnings -C link-arg=-Wl,-z,max-page-size=16384
         run: |
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          cargo ndk -t ${{ matrix.target }} -P 24 build -p meta-core-ffi --release --locked
+          cargo ndk -t ${{ matrix.target }} -P 24 build -p graphlava-ffi --release --locked
       - name: check 16 KB ELF alignment
         run: |
-          so=target/${{ matrix.target }}/release/libmeta_core_ffi.so
+          so=target/${{ matrix.target }}/release/libgraphlava_ffi.so
           readelf -lW "$so" | awk '$1=="LOAD" && $NF!="0x4000" {bad=1; print} END {exit bad}'
 
   docs:
@@ -139,6 +150,33 @@ jobs:
         run: |
           for seed in 1 2 3 4; do lake exe oracle "$seed" 2000 > "/tmp/trace-$seed.jsonl"; done
           wc -l /tmp/trace-*.jsonl
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # L1 refinement: replay seeds 1..64 x 2,000 oracle operations against the Rust store
+      - name: refinement replay
+        working-directory: .
+        env:
+          GRAPHLAVA_REQUIRE_REFINEMENT: "1"
+        run: cargo test --release --locked -p graphlava --test refinement
+
+  # W3C SPARQL 1.1 / 1.2 suites at the commit pinned in
+  # crates/graphlava/tests/w3c/PINNED.md ([[11-sparql#Conformance]]).
+  conformance:
+    name: W3C SPARQL conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v4
+        with:
+          path: target/w3c-tests
+          key: w3c-tests-${{ hashFiles('crates/graphlava/tests/w3c/fetch.sh') }}
+      - run: crates/graphlava/tests/w3c/fetch.sh
+      - name: conformance run
+        env:
+          GRAPHLAVA_REQUIRE_W3C: "1"
+        run: cargo test -p graphlava --release --locked --test w3c -- --nocapture
 
   spec-graph:
     name: tg (spec graph)
@@ -159,10 +197,89 @@ jobs:
 
   # Single required status check for the protect-main ruleset: aggregates every
   # job above, so the ruleset doesn't need to list each matrix leg by name.
+  crash:
+    name: Crash harness (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p graphlava --release --locked --test crash
+
+  golden-produce:
+    name: Golden file (produce on Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p graphlava --locked --test golden
+        env:
+          GRAPHLAVA_GOLDEN_OUT: ${{ github.workspace }}/golden
+      - uses: actions/upload-artifact@v4
+        with:
+          name: golden
+          path: golden/
+
+  golden-check:
+    name: Golden file (read on ${{ matrix.os }})
+    needs: golden-produce
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: golden
+          path: golden
+      - run: cargo test -p graphlava --locked --test golden
+        env:
+          GRAPHLAVA_GOLDEN_DIR: ${{ github.workspace }}/golden
+
+  ffi-sanitizers:
+    name: C FFI under ASan and LSan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The C programs link the staticlib; build it before the tests run.
+      - run: cargo build -p graphlava-ffi --lib --locked
+      - run: cargo test -p graphlava-ffi --locked --test c_program
+        env:
+          CC: clang
+          GRAPHLAVA_C_FLAGS: -fsanitize=address,leak -fno-omit-frame-pointer
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+
+  bench-harness:
+    name: Benchmark harness builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bench
+      - run: cargo clippy --all-targets -- -D warnings
+        working-directory: bench
+      - run: cargo test
+        working-directory: bench
+
   ci-ok:
     name: CI ok
     if: always()
-    needs: [lint, test, msrv, ios, android, docs, deny, formal, spec-graph]
+    needs: [lint, test, ffi-header, msrv, ios, android, docs, deny, formal, conformance, spec-graph, crash, golden-check, ffi-sanitizers, bench-harness]
     runs-on: ubuntu-latest
     steps:
       - name: all required jobs succeeded
@@ -171,3 +288,101 @@ jobs:
         run: |
           echo "job results: $RESULTS"
           for r in $RESULTS; do [ "$r" = success ] || exit 1; done
+
+  # Instruction-count gate on micro benchmarks (adr 0020,
+  # tg.md/17-benchmarks.md#Micro benchmarks): runs the iai-callgrind bench
+  # crates/graphlava/benches/iai.rs on the PR's base (the first parent of the
+  # merge commit) and saves it as baseline `base`, then on the merge commit,
+  # and fails when any case uses more than 3% more instructions (Ir).
+  # Pull requests only, so it is deliberately not part of `ci-ok`.
+  #
+  # Accepting a larger rise: a reviewer adds the `bench-accept` label to the PR
+  # and writes the reason in a PR comment, then re-runs this job (or the next
+  # push re-runs it). The comparison still runs and prints its report; only the
+  # failing step is skipped. The label is read from the event payload and, so
+  # that a re-run sees a label added later, again live through the API.
+  bench-gate:
+    name: Bench gate (instructions, max +3%)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      # Must equal the `iai-callgrind = "=…"` pin in crates/graphlava/Cargo.toml.
+      IAI_CALLGRIND_VERSION: 0.16.1
+      IAI_CALLGRIND_LIMIT: ir=3%
+      CARGO_PROFILE_BENCH_DEBUG: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: install valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+      - name: install iai-callgrind-runner (pinned to the library version)
+        run: |
+          locked=$(grep -A1 '^name = "iai-callgrind"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
+          if [ "$locked" != "$IAI_CALLGRIND_VERSION" ]; then
+            echo "::error::Cargo.lock has iai-callgrind $locked but IAI_CALLGRIND_VERSION is $IAI_CALLGRIND_VERSION; update ci.yml"
+            exit 1
+          fi
+          cargo install iai-callgrind-runner --version "$IAI_CALLGRIND_VERSION" --locked
+      - name: baseline (PR base)
+        run: |
+          head=$(git rev-parse HEAD)
+          base=$(git rev-parse HEAD^1)
+          echo "base $base, merge commit $head"
+          rm -rf target/iai # never compare against results restored from a cache
+          git checkout --quiet "$base"
+          if [ ! -f crates/graphlava/benches/iai.rs ]; then
+            echo "::notice::the base has no iai bench; nothing to compare against"
+            echo "NO_BASELINE=1" >> "$GITHUB_ENV"
+          else
+            # The runner must match the library version of the base commit.
+            ver=$(grep -A1 '^name = "iai-callgrind"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
+            runner=$(command -v iai-callgrind-runner)
+            if [ "$ver" != "$IAI_CALLGRIND_VERSION" ]; then
+              cargo install iai-callgrind-runner --version "$ver" --locked --root "$RUNNER_TEMP/iai-base"
+              runner="$RUNNER_TEMP/iai-base/bin/iai-callgrind-runner"
+            fi
+            if ! IAI_CALLGRIND_RUNNER="$runner" cargo bench -p graphlava --bench iai --locked -- --save-baseline=base; then
+              echo "::warning::the iai bench failed on the base commit; no baseline to compare against"
+              echo "NO_BASELINE=1" >> "$GITHUB_ENV"
+            fi
+          fi
+          git checkout --quiet "$head"
+      - name: compare (PR merge commit against the base)
+        id: compare
+        run: |
+          if [ -n "${NO_BASELINE:-}" ]; then
+            cargo bench -p graphlava --bench iai --locked
+            exit 0
+          fi
+          set +e
+          cargo bench -p graphlava --bench iai --locked -- \
+            --baseline=base --callgrind-limits="$IAI_CALLGRIND_LIMIT" 2>&1 | tee "$RUNNER_TEMP/iai.log"
+          code=${PIPESTATUS[0]}
+          set -e
+          # The runner exits 3 on a regression, which cargo reports as a bench
+          # failure; any other failure fails here, label or not.
+          if [ "$code" -ne 0 ] && grep -q "Performance has regressed" "$RUNNER_TEMP/iai.log"; then
+            echo "regressed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          exit "$code"
+      - name: fail on a rise above 3% (skipped with the bench-accept label)
+        if: steps.compare.outputs.regressed == 'true' && !contains(github.event.pull_request.labels.*.name, 'bench-accept')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name' | grep -qx bench-accept; then
+            echo "::warning::instruction counts rose more than 3%; accepted by the bench-accept label"
+            exit 0
+          fi
+          echo "::error::a micro benchmark uses more than 3% more instructions than the base (see the compare step). A reviewer can accept it with the bench-accept label and a reason in the PR."
+          exit 1

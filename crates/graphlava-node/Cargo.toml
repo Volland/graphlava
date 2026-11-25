@@ -1,0 +1,30 @@
+[package]
+name = "graphlava-node"
+version.workspace = true
+edition.workspace = true
+# napi 3 needs Rust 1.88; the core crate stays at the workspace MSRV (1.87).
+rust-version = "1.88"
+license.workspace = true
+repository.workspace = true
+description = "Node.js binding of graphlava (napi-rs, N-API 9)"
+readme = "README.md"
+homepage = "https://graphlava.org"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+# The tests are the `node:test` suite in bindings/node/test; a Rust test
+# binary would need the N-API symbols that only a Node process provides.
+test = false
+doctest = false
+
+[dependencies]
+graphlava = { path = "../graphlava" }
+napi = { version = "3.16", default-features = false, features = ["napi9"] }
+napi-derive = "3.7"
+
+[build-dependencies]
+napi-build = "2.7"
+
+[lints]
+workspace = true

@@ -1,0 +1,2 @@
+BAKEOFF PATCH 1: commit() skips msync when SKIP_MSYNC is set (NoFlush).
+BAKEOFF PATCH 2: commit() no longer unlocks (Drop does) - stock 1.4.3 double-unlocks the root RwLock, deadlocking a writer when readers run concurrently.

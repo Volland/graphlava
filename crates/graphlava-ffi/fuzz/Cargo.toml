@@ -1,0 +1,35 @@
+# cargo-fuzz targets for the C FFI (requirement `FFI misuse safety`).
+# Run from crates/graphlava-ffi with a nightly toolchain:
+#   cargo +nightly fuzz run ffi_calls -- -max_total_time=60
+#   cargo +nightly fuzz run journal_frames -- -max_total_time=60
+# CI nightly runs `ffi_calls` for one hour (.github/workflows/mobile.yml).
+[package]
+name = "graphlava-ffi-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+graphlava-ffi = { path = ".." }
+
+# Not part of the main workspace.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "ffi_calls"
+path = "fuzz_targets/ffi_calls.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "journal_frames"
+path = "fuzz_targets/journal_frames.rs"
+test = false
+doc = false
+bench = false

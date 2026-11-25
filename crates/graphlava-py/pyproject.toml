@@ -1,0 +1,61 @@
+# Packaging of the `graphlava` PyPI package: abi3 wheels for CPython >= 3.10 and
+# free-threaded 3.14t wheels for 5 targets (cibuildwheel), with py.typed and stubs.
+# @tg: implements:: [[openspec:python-binding#Python packaging]]
+
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "graphlava"
+description = "A mutable, single-file metagraph database for agent memory (Python binding)"
+requires-python = ">=3.10"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: Free Threading :: 2 - Beta",
+    "Typing :: Typed",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+arrow = ["pyarrow>=14"]
+test = ["pytest>=8", "hypothesis>=6", "pyarrow>=14", "mypy>=1.10"]
+
+[project.urls]
+Homepage = "https://graphlava.org"
+Repository = "https://github.com/Volland/graphlava"
+
+[tool.maturin]
+python-source = "python"
+module-name = "graphlava._native"
+features = ["arrow"]
+include = [{ path = "python/graphlava/py.typed", format = ["sdist", "wheel"] }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: builds a 1M-statement file (run with -m slow or GRAPHLAVA_SLOW=1)"]
+
+[tool.mypy]
+strict = true
+files = ["examples", "python/graphlava"]
+
+[tool.cibuildwheel]
+build = ["cp310-*", "cp314t-*"]
+skip = ["*-win32", "*-manylinux_i686", "*-musllinux_i686"]
+enable = ["cpython-freethreading"]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+musllinux-x86_64-image = "musllinux_1_2"
+musllinux-aarch64-image = "musllinux_1_2"
+test-requires = ["pytest>=8"]
+test-command = "python {project}/crates/graphlava-py/tests/smoke.py"
+
+[tool.cibuildwheel.linux]
+before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }
+
+[tool.cibuildwheel.macos]
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }

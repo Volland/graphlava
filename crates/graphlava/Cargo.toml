@@ -1,0 +1,52 @@
+[package]
+name = "graphlava"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+readme = "README.md"
+homepage = "https://graphlava.org"
+documentation = "https://docs.rs/graphlava"
+keywords = ["graph-database", "metagraph", "sparql", "datalog", "rdf"]
+categories = ["database-implementations", "embedded"]
+
+[dependencies]
+oxrdf = { version = "0.3.5", features = ["rdf-12"] }
+md-5 = "0.10"
+redb = "=2.6.4"
+regex = "1"
+roaring = "0.11.3"
+sha1 = "0.10"
+sha2 = "0.10"
+spargebra = { version = "0.4.8", features = ["sparql-12"] }
+xxhash-rust = { version = "0.8.21", features = ["xxh3"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+# Micro benchmarks ([[17-benchmarks#Micro benchmarks]], adr 0020). iai-callgrind is
+# pinned exactly: the CI bench-gate job installs iai-callgrind-runner at the
+# same version, and the two must match.
+criterion = { version = "=0.8.2", default-features = false, features = ["cargo_bench_support"] }
+iai-callgrind = "=0.16.1"
+oxrdfxml = { version = "0.2", features = ["rdf-12"] }
+oxttl = { version = "0.2", features = ["rdf-12"] }
+proptest = "1.11.0"
+redb = "=2.6.4"
+serde_json = "1.0.154"
+sparesults = { version = "0.3", features = ["sparql-12"] }
+tempfile = "3.27.0"
+
+# Wall-clock micro benchmarks (criterion), for local runs.
+[[bench]]
+name = "micro"
+harness = false
+
+# The same cases as instruction counts under Callgrind; the PR gate of
+# adr 0020. Runs only on Linux with valgrind; elsewhere it prints a notice.
+[[bench]]
+name = "iai"
+harness = false

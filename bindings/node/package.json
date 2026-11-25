@@ -1,0 +1,79 @@
+{
+  "name": "@graphlava/node",
+  "version": "0.0.0",
+  "description": "Embedded single-file metagraph database for agent memory (Node.js binding)",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Volland/graphlava",
+    "directory": "bindings/node"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "commonjs",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.js"
+    },
+    "./sync": {
+      "types": "./sync.d.ts",
+      "import": "./sync.mjs",
+      "require": "./sync.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.mjs",
+    "index.d.ts",
+    "sync.js",
+    "sync.mjs",
+    "sync.d.ts",
+    "lib/",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "napi": {
+    "binaryName": "graphlava",
+    "packageName": "@graphlava/node",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl",
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "optionalDependencies": {
+    "@graphlava/node-linux-x64-gnu": "0.0.0",
+    "@graphlava/node-linux-arm64-gnu": "0.0.0",
+    "@graphlava/node-linux-x64-musl": "0.0.0",
+    "@graphlava/node-darwin-arm64": "0.0.0",
+    "@graphlava/node-darwin-x64": "0.0.0",
+    "@graphlava/node-win32-x64-msvc": "0.0.0"
+  },
+  "scripts": {
+    "build": "napi build --platform --release --manifest-path ../../crates/graphlava-node/Cargo.toml --output-dir . --no-js --dts lib/native.d.ts",
+    "build:debug": "napi build --platform --manifest-path ../../crates/graphlava-node/Cargo.toml --output-dir . --no-js --dts lib/native.d.ts",
+    "test": "node --test --test-concurrency=1",
+    "typecheck": "tsc -p examples/tsconfig.json",
+    "bench:overhead": "node bench/overhead.mjs",
+    "bench:commit": "node bench/commit-latency.mjs",
+    "artifacts": "napi artifacts",
+    "prepublishOnly": "napi prepublish -t npm"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "3.11.1",
+    "@types/node": "^22.10.0",
+    "fast-check": "^4.3.0",
+    "typescript": "~5.9.3"
+  }
+}

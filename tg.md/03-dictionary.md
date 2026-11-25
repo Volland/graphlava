@@ -21,7 +21,9 @@ The dictionary makes every term an integer so that indexes and joins never touch
 
 ## Layout
 
-Six tables hold the dictionary. Forward lookups go from canonical term bytes to an ID, reverse lookups from an ID to term bytes; IRIs share namespace prefixes and literals share datatypes through two small tables.
+Eight tables hold the dictionary: forward and reverse term lookups, and forward and reverse tables for namespaces, datatypes and language tags.
+
+Forward lookups go from canonical term bytes to an ID, reverse lookups from an ID to term bytes; IRIs share namespace prefixes and literals share datatypes through small name tables.
 
 | Table | Key | Value | Notes |
 | --- | --- | --- | --- |
@@ -31,6 +33,10 @@ Six tables hold the dictionary. Forward lookups go from canonical term bytes to 
 | `dt_rev` | `dt_id: u32` (BE) | datatype IRI bytes | loaded into memory at open |
 | `dict_fwd` | encoded term key | `id: u64` (LE) | one entry per interned term |
 | `dict_rev` | `id: u64` (BE) | encoded term record | one entry per interned or owned term |
+| `lang_fwd` | lower-cased language tag | `lang_id: u16` | append-only, at most 65,535 ([[adr:0033]]) |
+| `lang_rev` | `lang_id: u16` (BE) | language tag | |
+
+Blank nodes have no entry: their label is derived from the ID ([[22-implementation-decisions#Blank nodes have no dictionary entry]]).
 
 ### Encoded term key
 
@@ -40,7 +46,7 @@ The `dict_fwd` key is the canonical term in a compact form. Short keys are store
 | --- | --- | --- |
 | 0 | `kind` | `0x01` IRI, `0x02` blank node, `0x03` dictionary literal, `0xFF` hashed |
 | 1..4 | `ns_id` (IRI) or `dt_id` (literal) | IRI namespace or literal datatype |
-| 5..6 | language ID (literal only, `0` if none) | see [[open-questions#Language tag table]] |
+| 5..6 | language ID (literal only, `0` if none) | 16-bit append-only tag table ([[adr:0033]]) |
 | 7.. | local name or lexical form, UTF-8 | canonical form |
 
 <rule id="dict-key-hash" strength="must">
@@ -160,7 +166,7 @@ Unused interned terms are reclaimed by a background mark-and-sweep, never by ref
 
 <rule id="dict-sweep-liveness" strength="must">
 
-A term is live if its ID appears in any of: an ordering (SPO, POS, OSP, any on-demand ordering, any multi table) in any position; a property record or value index; a hyperedge record or incidence entry; `gmem`; a derived-fact table; a vector index; or the meta-model. Each new structure that can hold a term ID must be added to this list, and to the mark pass, before it ships.
+A term is live if its ID appears in any of: an ordering (SPO, POS, OSP, any on-demand ordering, any multi table) in any position; a property record or value index; a hyperedge record or incidence entry; a hyperedge type declaration; a graph name (`gname`); the system IRIs recorded in `meta`; `gmem`; a derived-fact table; a vector index; or the meta-model. Each new structure that can hold a term ID must be added to this list, and to the mark pass, before it ships.
 
 </rule>
 
@@ -219,6 +225,5 @@ These tests cover correctness of the mapping and safety of the sweep.
 
 ## Open items
 
-Questions this spec leaves open; each is an `OpenQuestion` in [[open-questions]].
+No questions remain open; the ones this spec raised are answered in [[resolved-questions]].
 
-- [[open-questions#Language tag table]]

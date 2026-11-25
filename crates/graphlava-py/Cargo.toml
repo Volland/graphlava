@@ -1,0 +1,40 @@
+[package]
+name = "graphlava-py"
+version.workspace = true
+edition.workspace = true
+# PyO3 0.30 needs Rust 1.85; the workspace MSRV (1.87) is the binding's MSRV too.
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Python binding of graphlava (PyO3), published on PyPI as `graphlava`"
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib", "rlib"]
+# The extension links against libpython only when Python loads it, so a Rust
+# test harness cannot link; the crate is tested through pytest instead.
+test = false
+doctest = false
+
+[features]
+default = ["abi3", "arrow"]
+# One wheel per target for CPython >= 3.10. A free-threaded (3.14t) build
+# ignores abi3 and produces a version-specific wheel.
+abi3 = ["pyo3/abi3-py310"]
+# `Rows.to_arrow()` builds a pyarrow.Table; pyarrow itself comes from the
+# `graphlava[arrow]` extra, so the feature only gates the method.
+arrow = []
+
+[dependencies]
+graphlava = { path = "../graphlava" }
+pyo3 = { version = "0.30.1" }
+spargebra = { version = "0.4.8", features = ["sparql-12"] }
+
+[lints]
+workspace = true
+
+# Rust side of the `Binding overhead` benchmark (bench/overhead.py).
+[[example]]
+name = "overhead_baseline"
+path = "bench/rust_baseline.rs"

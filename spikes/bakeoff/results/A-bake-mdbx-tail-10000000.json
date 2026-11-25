@@ -1,0 +1,188 @@
+{
+  "args": {
+    "engine": "mdbx",
+    "n": "10000000",
+    "out": "results/A-bake-mdbx-tail-10000000.json",
+    "phases": "tp,ow,probe"
+  },
+  "env": {
+    "build": "cargo --release, lto=fat, codegen-units=1, debug=1 (symbols only)",
+    "cache_state": "warm (OS page cache not dropped; `purge` needs root)",
+    "cores": "12",
+    "cpu": "Apple M2 Max",
+    "dataset": "gen-v1 (src/data.rs)",
+    "fs": "/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse, protect, root data)",
+    "graphlava_commit": "d1bf69f (+ uncommitted working tree)",
+    "kernel": "27.2.0",
+    "os": "macOS 27.2.1 (26B131)",
+    "ram_bytes": "68719476736",
+    "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "seed": 42,
+    "timestamp": "2026-11-24T15:29:59Z"
+  },
+  "experiment": "A engine bake-off",
+  "mix": [
+    {
+      "op": "stmt_get",
+      "pct": 20
+    },
+    {
+      "op": "props_get",
+      "pct": 20
+    },
+    {
+      "op": "hop1_scan",
+      "pct": 10
+    },
+    {
+      "op": "hop2_scan",
+      "pct": 10
+    },
+    {
+      "op": "prop_overwrite",
+      "pct": 15
+    },
+    {
+      "op": "obj_overwrite",
+      "pct": 10
+    },
+    {
+      "op": "insert_1_5",
+      "pct": 10
+    },
+    {
+      "op": "delete",
+      "pct": 5
+    }
+  ],
+  "result": {
+    "bulk_load": {
+      "batch": 250000,
+      "disk_bytes_written": 33754546176,
+      "nodes": 1250000,
+      "runs": 1,
+      "stmts": 10000000,
+      "stmts_per_s": 165812.13334310328,
+      "wall_s": 60.309217416
+    },
+    "engine": "libmdbx-0.9.0",
+    "engine_info": {
+      "flush_call": "F_FULLFSYNC (libmdbx default on Apple)",
+      "page_size": 16384,
+      "sync_mode": "SAFE_NOSYNC + env_sync(force) for Flush",
+      "write_map": false
+    },
+    "n": 10000000,
+    "noflush_only_probe": {
+      "after_noflush": {
+        "alloc_bytes": 4294983680,
+        "bytes_per_stmt_alloc": 427.9570805743116,
+        "bytes_per_stmt_len": 427.9570805743116,
+        "file_len": 4294983680,
+        "live_stmts_approx": 10036015
+      },
+      "after_one_flush_plus_10": {
+        "alloc_bytes": 4294983680,
+        "bytes_per_stmt_alloc": 427.9570805743116,
+        "bytes_per_stmt_len": 427.9570805743116,
+        "file_len": 4294983680,
+        "live_stmts_approx": 10036015
+      },
+      "before": {
+        "alloc_bytes": 4172251136,
+        "bytes_per_stmt_alloc": 415.727869677357,
+        "bytes_per_stmt_len": 427.9570805743116,
+        "file_len": 4294983680,
+        "live_stmts_approx": 10036015
+      },
+      "overwrites": 100000,
+      "wall_s": 47.696212709
+    },
+    "overwrite_phase": {
+      "disk_bytes_per_overwrite": 240719.577088,
+      "disk_bytes_written": 240719577088,
+      "flush_every": 100,
+      "kv_bytes_changed": 138981478,
+      "overwrites": 1000000,
+      "wall_s": 624.500598791,
+      "write_amp_vs_kv_bytes": 1732.0263142402328
+    },
+    "size_after_load": {
+      "alloc_bytes": 4172251136,
+      "bytes_per_stmt_alloc": 417.2251136,
+      "bytes_per_stmt_len": 429.498368,
+      "file_len": 4294983680,
+      "live_stmts_approx": 10000000
+    },
+    "size_after_overwrites": {
+      "alloc_bytes": 4172251136,
+      "bytes_per_stmt_alloc": 415.727869677357,
+      "bytes_per_stmt_len": 427.9570805743116,
+      "file_len": 4294983680,
+      "live_stmts_approx": 10036015
+    },
+    "size_before_overwrites": {
+      "alloc_bytes": 4172251136,
+      "bytes_per_stmt_alloc": 415.727869677357,
+      "bytes_per_stmt_len": 427.9570805743116,
+      "file_len": 4294983680,
+      "live_stmts_approx": 10036015
+    },
+    "throughput": [
+      {
+        "durability": "NoFlush",
+        "reader_errors": 0,
+        "reader_ops_per_s": 242628.8,
+        "reader_ops_per_s_per_thread": 242628.8,
+        "readers": 1,
+        "secs": 10.0,
+        "writer_ops_per_s": 1680.0
+      },
+      {
+        "durability": "NoFlush",
+        "reader_errors": 0,
+        "reader_ops_per_s": 666743.8,
+        "reader_ops_per_s_per_thread": 166685.95,
+        "readers": 4,
+        "secs": 10.0,
+        "writer_ops_per_s": 1450.0
+      },
+      {
+        "durability": "NoFlush",
+        "reader_errors": 2,
+        "reader_ops_per_s": 912429.9,
+        "reader_ops_per_s_per_thread": 57026.86875,
+        "readers": 16,
+        "secs": 10.0,
+        "writer_ops_per_s": 1210.0
+      },
+      {
+        "durability": "Flush",
+        "reader_errors": 0,
+        "reader_ops_per_s": 257680.8,
+        "reader_ops_per_s_per_thread": 257680.8,
+        "readers": 1,
+        "secs": 10.0,
+        "writer_ops_per_s": 136.2
+      },
+      {
+        "durability": "Flush",
+        "reader_errors": 0,
+        "reader_ops_per_s": 724406.3,
+        "reader_ops_per_s_per_thread": 181101.575,
+        "readers": 4,
+        "secs": 10.0,
+        "writer_ops_per_s": 135.0
+      },
+      {
+        "durability": "Flush",
+        "reader_errors": 0,
+        "reader_ops_per_s": 994393.3,
+        "reader_ops_per_s_per_thread": 62149.58125,
+        "readers": 16,
+        "secs": 10.0,
+        "writer_ops_per_s": 130.0
+      }
+    ]
+  }
+}

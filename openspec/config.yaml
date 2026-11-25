@@ -5,9 +5,9 @@ schema: spec-driven
 # detail lives in tg.md/ (specs 00–21), docs/adr/ and CONTEXT.md; read those.
 # ---------------------------------------------------------------------------
 context: |
-  # meta-core (repo: graphlava)
+  # graphlava (repo: graphlava)
 
-  meta-core is an embedded, mutable, current-state-only metagraph database in
+  graphlava is an embedded, mutable, current-state-only metagraph database in
   Rust, tuned for agent memory: many small write transactions, value overwrites,
   point lookups, 2–3 hop traversals and star patterns. It is one file on redb,
   opened by exactly one owner process (ADR 0002).
@@ -56,7 +56,7 @@ context: |
 
   ## Platforms
   Linux, macOS, Windows, iOS, Android (16 KB page alignment, iOS suspend
-  lock rules). Rust edition 2024, MSRV 1.85, no `unsafe` without a SAFETY
+  lock rules). Rust edition 2024, MSRV 1.87, no `unsafe` without a SAFETY
   comment, `unsafe_op_in_unsafe_fn` denied, clippy -D warnings.
 
   ## Assurance strategy (tg.md/19-verification.md, ADR 0019)
@@ -129,9 +129,9 @@ rules:
     - "tg: Include a task to update the lat.md section that explains each capability and list the capability in that file's `openspec:` frontmatter."
     - "Order each capability group as: (1) Lean model and theorems, (2) failing tests (unit, property, refinement replay, e2e, crash), (3) implementation, (4) benchmarks, (5) annotations. Tests are written red before the code that makes them green."
     - "Formal tasks: state and prove the theorems in formal/MetaCore/ with zero `sorry`; add or update the `Proof` section in tg.md/20-proofs.md with `proves::` edges and `{theorem, status}`; extend formal/Main.lean so the oracle emits the new operations; run `lake build` and `formal/scripts/lean-audit.sh`."
-    - "Refinement tasks: replay oracle traces (at least seeds 1..64 × 2,000 operations) in crates/meta-core/tests/refinement.rs and compare every result and the final state through the abstraction function."
-    - "E2E tasks: for each scenario marked `Level: e2e` or `crash`, add a test under crates/meta-core/tests/e2e/ that opens a real file in a temp dir through the public API (and the C FFI where the scenario names it), and a catalogue entry in tg.md/21-e2e-tests.md."
-    - "Benchmark tasks: add or extend a criterion micro bench in crates/meta-core/benches/ and, for workload claims, a macro workload in bench/; record the baseline JSON; wire the instruction-count gate into CI."
+    - "Refinement tasks: replay oracle traces (at least seeds 1..64 × 2,000 operations) in crates/graphlava/tests/refinement.rs and compare every result and the final state through the abstraction function."
+    - "E2E tasks: for each scenario marked `Level: e2e` or `crash`, add a test under crates/graphlava/tests/e2e/ that opens a real file in a temp dir through the public API (and the C FFI where the scenario names it), and a catalogue entry in tg.md/21-e2e-tests.md."
+    - "Benchmark tasks: add or extend a criterion micro bench in crates/graphlava/benches/ and, for workload claims, a macro workload in bench/; record the baseline JSON; wire the instruction-count gate into CI."
     - "Keep each task under one day of work with a checkable outcome (a passing command, a file, a number)."
     - "tg: End with a task to run `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`, `lake build`, `formal/scripts/lean-audit.sh`, `tg check`, `tg ontology check` and `tg trace <capability> --gaps`, and close every gap they report."
 
